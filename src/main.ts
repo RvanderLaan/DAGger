@@ -1,4 +1,4 @@
-import { SVDAG, Camera } from "./SVDAG";
+import { SVDAG, Camera, OrbitController } from "./SVDAG";
 import { vec3 } from "gl-matrix";
 
 interface IRendererState {
@@ -19,6 +19,9 @@ let canvas: HTMLCanvasElement;
 let gl: WebGL2RenderingContext;
 let program: WebGLProgram;
 let texture: WebGLTexture;
+let controller: OrbitController;
+let scene: SVDAG;
+
 const camera = new Camera();
 
 // Compute nearest lower power of 2 for n in [1, 2**31-1]:
@@ -44,18 +47,24 @@ async function init() {
   gl.clearColor(0.0, 0.0, 0.0, 1.0);
   gl.clear(gl.COLOR_BUFFER_BIT);
 
-  const scene = await loadScene();
-  const texSize = nextPowerOf2(Math.pow(scene.nodes.length, 1 / 3) - 1e-10); // 3D texture size
+  scene = await loadScene();
 
   program = await loadProgram(gl, scene.nLevels);
-  setInitialUniforms(gl, canvas, scene);
 
   gl.enable(gl.DEPTH_TEST);
 
   texture = await createTexture(gl, scene);
 
-  camera.position.set(scene.bboxEnd);
-  // camera.rotation.
+  camera.position.set(scene.bboxStart);
+  camera.target.set(scene.bboxCenter);
+  camera.updateMatrices();
+
+  setInitialUniforms();
+
+  controller = new OrbitController(camera, vec3.distance(scene.bboxStart, scene.bboxEnd) * 0.1);
+
+  window.addEventListener('keydown', controller.onKeyDown.bind(controller));
+  window.addEventListener('keyup', controller.onKeyUp.bind(controller));
 
   // Start render loop
   requestAnimationFrame(render);
@@ -130,7 +139,7 @@ async function loadProgram(gl: WebGL2RenderingContext, nLevels: number) {
 }
 
 async function loadScene() {
-  const response = await fetch('/examples/EpicCitadel_13.svdag');
+  const response = await fetch('/examples/sponza_11.svdag'); // EpicCitadel_12
 
   const svdag = new SVDAG();
   svdag.load(await response.arrayBuffer());
@@ -146,7 +155,7 @@ function getProjectionFactor(pixelTolerance: number, screenDivisor: number) {
 	return inv_2tan_half_fovy / screen_tolerance;
 }
 
-async function setInitialUniforms(gl: WebGL2RenderingContext, canvas: HTMLCanvasElement, svdag: SVDAG) {
+async function setInitialUniforms() {
   const uResolutionLoc = gl.getUniformLocation(program, 'resolution');
   gl.uniform2f(uResolutionLoc, canvas.width, canvas.height);
 
@@ -154,20 +163,25 @@ async function setInitialUniforms(gl: WebGL2RenderingContext, canvas: HTMLCanvas
   gl.uniform1i(uNodes, 0);
 
   const uSceneBBoxMin = gl.getUniformLocation(program, 'sceneBBoxMin');
-  gl.uniform3fv(uSceneBBoxMin, svdag.bboxStart);
+  gl.uniform3fv(uSceneBBoxMin, scene.bboxStart);
   const uSceneBBoxMax = gl.getUniformLocation(program, 'sceneBBoxMax');
-  gl.uniform3fv(uSceneBBoxMax, svdag.bboxEnd);
+  gl.uniform3fv(uSceneBBoxMax, scene.bboxEnd);
   const uSceneCenter = gl.getUniformLocation(program, 'sceneCenter');
-  gl.uniform3fv(uSceneCenter, svdag.bboxCenter);
+  gl.uniform3fv(uSceneCenter, scene.bboxCenter);
   const uRootHalfSide = gl.getUniformLocation(program, 'rootHalfSide');
-  gl.uniform1f(uRootHalfSide, svdag.rootSide); // todo: divide by 1 << (drawLevel + 1)
+  gl.uniform1f(uRootHalfSide, scene.rootSide / 2); // todo: divide by 1 << (drawLevel + 1)
 
   const uMaxIters = gl.getUniformLocation(program, 'maxIters');
   gl.uniform1ui(uMaxIters, 300);
   const uDrawLevel = gl.getUniformLocation(program, 'drawLevel');
-  gl.uniform1ui(uDrawLevel, svdag.nLevels);
+  gl.uniform1ui(uDrawLevel, scene.nLevels);
   const uProjectionFactor = gl.getUniformLocation(program, 'projectionFactor');
   gl.uniform1f(uProjectionFactor, getProjectionFactor(state.pixelTolerance, 1));
+
+  const uViewMatInv = gl.getUniformLocation(program, 'viewMatInv');
+  gl.uniformMatrix4fv(uViewMatInv, false, camera.viewMatInv);
+  const uProjMatInv = gl.getUniformLocation(program, 'projMatInv');
+  gl.uniformMatrix4fv(uProjMatInv, false, camera.projMatInv);
 
 }
 
@@ -199,16 +213,16 @@ async function createTexture(gl: WebGL2RenderingContext, svdag: SVDAG) {
 
 
 function render() {
-  // gl.useProgram(program);
+  // Process input
+  controller.update(1/60);
+
   // Set uniforms
   const uTimeLoc = gl.getUniformLocation(program, 'time');
   gl.uniform1f(uTimeLoc, new Date().getTime() / 1000 - state.startTime);
 
-  // const uViewMatInv = gl.getUniformLocation(program, 'viewMatInv');
-  // gl.uniformMatrix4fv(uViewMatInv, )
+  setInitialUniforms();
 
-
-  // Update 
+  // Render 
   gl.clear(gl.COLOR_BUFFER_BIT);
   gl.viewport(0, 0, canvas.width, canvas.height);
   gl.drawArrays(gl.TRIANGLES, 0, 3);
