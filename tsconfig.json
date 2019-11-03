@@ -1,11 +1,13 @@
 {
   "compilerOptions": {
-      "module": "commonjs",
-      "noImplicitAny": true,
-      "removeComments": true,
-      "preserveConstEnums": true,
-      "sourceMap": true,
-      "outDir": "static/js"
+    "target": "es6",
+    "lib": ["es2018", "dom", "esnext.bigint"],
+    "noImplicitAny": true,
+    "removeComments": true,
+    "baseUrl": "./js",
+    "preserveConstEnums": true,
+    "sourceMap": true,
+    "outDir": "static/js"
   },
   "include": [
     "src/**/*.ts"
