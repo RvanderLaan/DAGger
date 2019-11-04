@@ -1,6 +1,10 @@
-Goal: Render SVDAG in browser.
-Problem: samplerbuffer not supported, needs to be texture3d, which is implemented for ssvdag
-OK, then we do it for the ESVDAG - strip out mirror stuff
+# DAGger: Sparse Voxel DAG Raycasting on the Web
 
-No, that won't work - no 64 bit sampler buffer or texture type available.
-Easiest would be to do conventional SVDAG with 32 bit texture
+[Live Demo](http://45.77.96.202/dagger/)
+
+Web version of the viewer application from the [SymVox](https://github.com/RvanderLaan/SymVox) repository.
+
+Goal: Render Sparse Voxel DAG in the browser using WebGL.
+Due to limitations of WebGL, some things need to be rewritten.
+- No support for SamplerBuffer, replaced with Texture3D 
+

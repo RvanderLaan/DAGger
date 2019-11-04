@@ -139,7 +139,7 @@ async function loadProgram(gl: WebGL2RenderingContext, nLevels: number) {
 }
 
 async function loadScene() {
-  const response = await fetch('/examples/sponza_11.svdag'); // EpicCitadel_12
+  const response = await fetch('examples/sponza_11.svdag'); // EpicCitadel_12
 
   const svdag = new SVDAG();
   svdag.load(await response.arrayBuffer());
