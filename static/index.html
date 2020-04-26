@@ -7,6 +7,8 @@
       background-color: slategray;
       height: 100%;
       position: relative;
+      font-family: sans-serif;
+      font-size: 14px;
     }
     canvas {
       position: absolute;
@@ -14,9 +16,84 @@
       left: 50%;
       transform: translate(-50%, -50%);
     }
+    #overlay {
+      position: absolute;
+      top: 0%;
+      right: 0%;
+      width: 200px;
+      height: 165px;
+      background: rgba(20, 20, 20, 0.5);
+      color: white;
+      padding: 4px;
+    }
+    #overlay label {
+      padding-bottom: 6px;
+      display: inline-block;
+    }
+    #overlay input {
+      right: 4px;
+      position: absolute;
+      max-width: 25%;
+    }
+    a, a:visited {
+      color: white;
+    }
   </style>
 </header>
 <body>
   <canvas id="glCanvas"></canvas>
+  <div id="overlay">
+
+    <span><b><a href="https://github.com/RvanderLaan/DAGger" target="_blank">DAGger</a> settings</b></span>
+    <button style="width: 10%; float: right">-</button>
+    <button style="width: 10%; float: right"
+      onclick="alert('Controls:\n-WASD to move around\n-QE to rotate\n-Drag LMB to rate\n-Drag RMB to zoom')"
+    >?</button>
+
+    <br />
+    
+    <!-- Todo: Tab for File, Renderer, Controller -->
+
+    <select style="width: 100%">
+      <option value="sponza_11.svdag">Crytek Sponza [2K] (2MB)</option>
+      <option value="EpicCitadel_11.svdag">Epic Citadel [2K] (3MB)</option>
+    </select>
+
+    <button id="load">Load</button>
+
+    <button id="reset">Reset</button>
+
+    <br />
+
+    <label for="renderMode">Render mode</label>
+    <select id="renderMode" style="max-width: 50%; float: right">
+      <option value="0">Iterations</option>
+      <option value="1">Diffuse lighting</option>
+      <option value="2">Depth</option>
+    </select>
+
+    <br />
+
+    <label for="renderScale" title="Down- or upscale the render resolution">
+      Render scale</label>
+    <input type="number" id="renderScale" min="0.25" max="2.0" value="1.0" step="0.25"
+      onchange="setRenderScale(this.value)" />
+
+    <br />
+
+    <label for="drawLevel" title="Determines at which resolution to render the scene">Draw level</label>
+    <input type="number" id="drawLevel" min="1" max="20" value="20" onchange="setDrawLevel(this.value)" />
+    
+    <br />
+    
+    <label for="maxIterations" title="The max. amount of iterations per ray. Rays with too few iterations show up as red pixels">
+      Max iterations</label>
+    <input type="number" id="maxIterations" min="0" max="1000" value="250" step="10" onchange="setMaxIterations(this.value)" />
+
+    <br />
+
+    <label for="uniqueColors" title="Assigns unique colors to each identical node in memory">Unique colors</label>
+    <input type="checkbox" id="uniqueColors" value="false" />
+  </div>
   <script src="js/bundle.js"></script>
 </body>

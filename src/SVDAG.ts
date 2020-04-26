@@ -6,13 +6,28 @@ export abstract class EncodedOctree {
   bboxCenter: vec3 = vec3.create();
   rootSide: number;
   nLevels: number;
+  nNodes: number;
 }
 
 export class SVDAG extends EncodedOctree {
   nodes: Uint32Array;
 
+  initialized: boolean = false;
+  nodesLoadedOffset: number = 0;
+
   load(buffer: ArrayBuffer) {
     // Header
+    let i = this.parseHeader(buffer);
+
+    // Nodes
+    const nodeCount = new Uint32Array(buffer.slice(i, i + 4))[0];
+    i += 4;
+    this.nodes = new Uint32Array(buffer.slice(i, i + nodeCount * 4));
+    i += nodeCount * 4;
+  }
+
+  parseHeader(buffer: ArrayBuffer) {
+
     let i = 0;
     this.bboxStart.set(new Float32Array(buffer.slice(i, i + 12))); // first 12 bytes is bbox start
     i += 12;
@@ -22,20 +37,32 @@ export class SVDAG extends EncodedOctree {
     i += 4;
     this.nLevels = new Uint32Array(buffer.slice(i, i + 4))[0];
     i += 4;
-    const nNodes = new Uint32Array(buffer.slice(i, i + 4))[0];
+    this.nNodes = new Uint32Array(buffer.slice(i, i + 4))[0];
     i += 4;
     const firstLeafPointer = new Uint32Array(buffer.slice(i, i + 4))[0];
     i += 4;
 
-    // Nodes
-    const nodeCount = new Uint32Array(buffer.slice(i, i + 4))[0];
-    i += 4;
-    this.nodes = new Uint32Array(buffer.slice(i, i + nodeCount * 4));
-    i += nodeCount * 4;
-
     // Utils
     vec3.sub(this.bboxCenter, this.bboxEnd, this.bboxStart);
     vec3.scaleAndAdd(this.bboxCenter, this.bboxStart, this.bboxCenter, 0.5);
+
+    return i;
+  }
+
+  loadChunk(buffer: Uint8Array) {
+    if (!this.initialized) {
+      const lastOffset = this.parseHeader(buffer.buffer);
+      this.nodes = new Uint32Array(this.nNodes);
+      this.initialized = true;
+
+      console.log('nnodes: ', this.nNodes);
+
+      this.loadChunk(buffer.slice(lastOffset));
+    } else {
+      console.log(`Loading chunk containing ${buffer.length / 4} nodes...`);
+      this.nodes.set(new Uint32Array(buffer.buffer), this.nodesLoadedOffset);
+      this.nodesLoadedOffset += buffer.byteLength / 4;
+    }
   }
 }
 

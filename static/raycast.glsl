@@ -46,7 +46,7 @@ struct Ray {
 
 struct traversal_status {
 	float t_current;
-	uint node_index;
+	int node_index;
 	uint hdr;
 	ivec3 mirror_mask;
 	uvec2 leaf_data;
@@ -62,16 +62,16 @@ struct traversal_status {
 	uint level;
 };
 
-void stack_push(in uint node, in uint hdr, in ivec3 mirror_mask, in uint level) {
+void stack_push(in int node, in uint hdr, in ivec3 mirror_mask, in uint level) {
 	int mask = mirror_mask.x | (mirror_mask.y << 1) | (mirror_mask.z << 2) | int(level << 3);
 	stack[stack_size] = ivec3(node, hdr, mask);
 	++stack_size;
 }
 
-void stack_pop_in(out uint node, out uint hdr, out ivec3 mirror_mask, out uint level) {
+void stack_pop_in(out int node, out uint hdr, out ivec3 mirror_mask, out uint level) {
 	--stack_size;
 	ivec3 node_mask = stack[stack_size];
-	node = uint(node_mask.x);
+	node = (node_mask.x);
 	hdr = uint(node_mask.y);
 	int mask = node_mask.z;
 	mirror_mask = ivec3(mask & 1, (mask >> 1) & 1, (mask >> 2) & 1);
@@ -91,36 +91,36 @@ uint voxel_to_linear_idx(in ivec3 mirror_mask, in ivec3 idx, in int sz) {
 // SVDAG data fetching
 #define LEAF_SIZE 2
 
-uint myFetch(in uint idx) {
-	return texelFetch( nodes, 
+int myFetch(in int idx) {
+	return int(texelFetch(nodes, 
 		ivec3(
 			idx % TEX3D_SIZE,
 			(idx/TEX3D_SIZE) % TEX3D_SIZE,
 			idx/(TEX3D_SIZE_POW2)
 		), 0
-	).x;
+	).x);
 }
 
 bool fetch_voxel_bit(in traversal_status ts) {
-	return (ts.hdr & (1u << ts.child_linear_index)) != 0u;
+	return (int(ts.hdr) & (1 << int(ts.child_linear_index))) != 0;
 }
 
 void fetch_data(inout traversal_status ts) {
-	ts.hdr = myFetch(ts.node_index);
+	ts.hdr = uint(myFetch(ts.node_index));
 }
 
 // Counts amount of bits in 8 bit int
-uint bitCount(in uint num) {
-	uint n = num;
-	n = ((0xaau & n) >> 1) + (0x55u & n);
-	n = ((0xccu & n) >> 2) + (0x33u & n);
-	n = ((0xf0u & n) >> 4) + (0x0fu & n);
+int bitCount(in int num) {
+	int n = num;
+	n = ((0xaa & n) >> 1) + (0x55 & n);
+	n = ((0xcc & n) >> 2) + (0x33 & n);
+	n = ((0xf0 & n) >> 4) + (0x0f & n);
 	return n;
 }
 
 void fetch_child_index_in(inout traversal_status ts) {
-	uint childPtrPos = bitCount((ts.hdr & 0xFFu) >> ts.child_linear_index);
-	ts.node_index = uint(myFetch(ts.node_index + childPtrPos));
+	int childPtrPos = bitCount(int(ts.hdr & 0xFFu) >> int(ts.child_linear_index));
+	ts.node_index = (myFetch(ts.node_index + int(childPtrPos)));
 }
 
 
@@ -200,9 +200,9 @@ void up_in(in Ray r, inout traversal_status ts) {
 	
 	ts.idx >>= delta_level; // always delta_level >= 1
 	uint cellSizeMod = (1u << delta_level);
-	ts.cell_size *= float(cellSizeMod); 
+	ts.cell_size *= float(cellSizeMod);
 	ts.current_node_size = ts.level < INNER_LEVELS ? 2 : LEAF_SIZE;
-	ts.local_idx = ts.idx & 1; 
+	ts.local_idx = ts.idx & 1;
 	
 	ivec3 delta_idx_conservative = max(ivec3(0), ts.delta_idx);
 	ivec3 idx_next = ts.idx + delta_idx_conservative;
@@ -298,7 +298,7 @@ void init(inout Ray r, inout traversal_status ts) {
 	dda_init(r, ts);
 	ts.current_node_size = 2;
 	
-	ts.node_index = 0u;
+	ts.node_index = 0;
 	fetch_data(ts);
 	ts.child_linear_index =  voxel_to_linear_idx(ts.mirror_mask, ts.local_idx, ts.current_node_size);
 }
@@ -317,8 +317,9 @@ void init(inout Ray r, inout traversal_status ts) {
 //  W: node index (-1 => no intersection)
 vec4 trace_ray(in Ray r, in vec2 t_min_max, const in float projection_factor, out vec3 norm) {
 	
-	if (!transform_ray(r, t_min_max))
+	if (!transform_ray(r, t_min_max)) {
 		return vec4(-4.0,0,0,-1); // out of scene Bbox
+	}
 	
 	float scale = 2.0 * rootHalfSide;
 	traversal_status ts;
@@ -385,27 +386,25 @@ Ray computeCameraRay(in vec2 pixelScreenCoords) {
 void main(void) {
   // vec2 uv = (gl_FragCoord.xy - resolution * 0.5) / resolution.y;
 	vec2 screenCoords = (gl_FragCoord.xy / resolution) * 2.0 - 1.0;
-
 	
   // Unit direction ray.
-  vec3 rd = normalize(vec3(screenCoords, 1.));
+  // vec3 rd = normalize(vec3(screenCoords, 1.));
 
-  // Some cheap camera movement, for a bit of a look around. I use this far
-  // too often. I'm even beginning to bore myself, at this point. :)
-	float a = -0.25;
-  float cs = cos(a),
-			  si = sin(a);
-  // rd.xy = mat2(cs, si, -si, cs)*rd.xy;
-  rd.xz = mat2(cs, si, -si, cs)*rd.xz;
+  // // Some cheap camera movement, for a bit of a look around. I use this far
+  // // too often. I'm even beginning to bore myself, at this point. :)
+	// float a = -0.25;
+  // float cs = cos(a),
+	// 		  si = sin(a);
+  // rd.yz = mat2(cs, si, -si, cs)*rd.yz;
+  // rd.xz = mat2(cs, si, -si, cs)*rd.xz;
 
+	// Ray r;
+	// r.o = sceneCenter
+	// 	//  + vec3(0, sceneCenter.y * 0.5, 0)
+	// 	 + cos(time * 0.5) * vec3(sceneCenter.x, 0, 0);
+	// r.d = normalize(rd); // normalize(sceneBBoxMax - sceneBBoxMin);
 
-	Ray r;
-	r.o = sceneCenter
-		//  + vec3(0, sceneCenter.y * 0.5, 0)
-		 + cos(time * 0.1) * vec3(sceneCenter.x, 0, 0);
-	r.d = normalize(rd); // normalize(sceneBBoxMax - sceneBBoxMin);
-
-	// Ray r = computeCameraRay(uv);
+	Ray r = computeCameraRay(screenCoords);
 	float epsilon = 1E-3f;
 	vec2 t_min_max = vec2(0, 1e30);
 
