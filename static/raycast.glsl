@@ -110,16 +110,16 @@ void fetch_data(inout traversal_status ts) {
 }
 
 // Counts amount of bits in 8 bit int
-int bitCount(in int num) {
-	int n = num;
-	n = ((0xaa & n) >> 1) + (0x55 & n);
-	n = ((0xcc & n) >> 2) + (0x33 & n);
-	n = ((0xf0 & n) >> 4) + (0x0f & n);
+uint bitCount(in uint num) {
+	uint n = num;
+	n = ((0xaau & n) >> 1) + (0x55u & n);
+	n = ((0xccu & n) >> 2) + (0x33u & n);
+	n = ((0xf0u & n) >> 4) + (0x0fu & n);
 	return n;
 }
 
 void fetch_child_index_in(inout traversal_status ts) {
-	int childPtrPos = bitCount(int(ts.hdr & 0xFFu) >> int(ts.child_linear_index));
+	uint childPtrPos = bitCount(ts.hdr & 0xFFu >> ts.child_linear_index);
 	ts.node_index = (myFetch(ts.node_index + int(childPtrPos)));
 }
 
@@ -199,8 +199,7 @@ void up_in(in Ray r, inout traversal_status ts) {
 	delta_level -= ts.level;
 	
 	ts.idx >>= delta_level; // always delta_level >= 1
-	uint cellSizeMod = (1u << delta_level);
-	ts.cell_size *= float(cellSizeMod);
+	ts.cell_size *= float(1u << delta_level); // float(cellSizeMod);
 	ts.current_node_size = ts.level < INNER_LEVELS ? 2 : LEAF_SIZE;
 	ts.local_idx = ts.idx & 1;
 	
@@ -290,7 +289,7 @@ void init(inout Ray r, inout traversal_status ts) {
 	ts.delta_idx = ivec3(sign(r.d));
 	
 	// Level status
-	ts.mirror_mask = ivec3(0,0,0);
+	ts.mirror_mask = ivec3(0);
 	ts.level = 0u;
 	ts.cell_size = 0.5;
 	
@@ -325,6 +324,10 @@ vec4 trace_ray(in Ray r, in vec2 t_min_max, const in float projection_factor, ou
 	traversal_status ts;
 	ts.t_current = t_min_max.x;
 	init(r, ts);
+
+	
+	// fragColor = vec4(ts.inv_ray_d, 1);
+	// return vec4(0);
 
 	ivec3 stepDir = ivec3(0);
 	
@@ -424,21 +427,25 @@ void main(void) {
 			
 		color = vec3(t);
 	}
-	else if (result.x == -1. || result.x == -2. ) { // inside BBox, but no intersection
+	else if (result.x >= -2. ) { // inside BBox, but no intersection
 		float t = result.z / float(maxIters);
 		color = vec3(t, t*0.5, 1);
 	}
-	else if (result.x == -3.) // too many iterations
+	else if (result.x >= -3.) // too many iterations
 	{
 		color = vec3(1.,0,0);
 	}
-	else if (result.x == -4.) // out of bbox
+	else if (result.x >= -4.) // out of bbox
 	{
 		color = vec3(0.5,0,1.);
 	}
-	else {
+	else { // other: ??? should never happen?
+	// This happens, since the Intersection case somehow returns negative values...
 		// blue gradient
-		color = vec3(0.2, 0.4, 0.5) * (screenCoords.y + 0.75);
+		// color = vec3(0.2, 0.4, 0.5) * (screenCoords.y + 0.75);
+
+		// orange gradient
+		color = vec3(0.5, 0.3, 0.1) * (screenCoords.y + 0.75);
 
  		// first slice of 3D texture
 		// uint idx = texelFetch(nodes, ivec3((uv + 0.5) * float(TEX3D_SIZE), int(time / 1.) % 4), 0).x; // 

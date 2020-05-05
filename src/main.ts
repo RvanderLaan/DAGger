@@ -1,5 +1,7 @@
-import { SVDAG, Camera, OrbitController } from "./SVDAG";
+import { SVDAG } from "./SVDAG";
 import { vec3 } from "gl-matrix";
+import Camera from "./Camera";
+import OrbitController from "./OrbitController";
 
 interface IRendererState {
   startTime: number;
@@ -32,6 +34,8 @@ let scene: SVDAG;
 let maxT3DTexels: number;
 
 const camera = new Camera();
+
+export const rerender = () => requestAnimationFrame(render);
 
 function setRenderScale(num: number) {
   state.renderScale = num;
@@ -66,6 +70,9 @@ async function init() {
   // console.log(gl.getSupportedExtensions());
   maxT3DTexels = gl.getParameter(gl.MAX_3D_TEXTURE_SIZE);
 
+  const maxNodes = Math.floor(Math.pow(maxT3DTexels, 3) / 5); // average of 4 pointers per node + 1 header texel (32 bit texels)
+  console.log(`Max 3D tex = ${maxT3DTexels}. Max avg. nodes ~= ${maxNodes} = ${Math.round(maxNodes / 1e6)} MNodes`);
+
   gl.clearColor(0.0, 0.0, 0.0, 1.0);
   gl.clear(gl.COLOR_BUFFER_BIT);
 
@@ -87,11 +94,20 @@ async function init() {
 
   controller = new OrbitController(camera, vec3.distance(scene.bboxStart, scene.bboxEnd) * 0.1);
 
-  window.addEventListener('keydown', controller.onKeyDown.bind(controller));
-  window.addEventListener('keyup', controller.onKeyUp.bind(controller));
+  canvas.tabIndex = 0;
+  canvas.addEventListener('keydown', controller.onKeyDown.bind(controller));
+  canvas.addEventListener('keyup', controller.onKeyUp.bind(controller));
+  canvas.addEventListener('mousedown', controller.onMouseDown.bind(controller));
+  canvas.addEventListener('mouseup', controller.onMouseUp.bind(controller));
+  canvas.addEventListener('mousemove', controller.onMouseMove.bind(controller));
+  canvas.addEventListener('wheel', controller.onMouseWheel.bind(controller));
+  // canvas.addEventListener('contextmenu', () => false);
+  canvas.oncontextmenu = () => false;
 
   // Start render loop
-  requestAnimationFrame(render);
+  // TODO: Only rerender when input changes
+  // TODO: Re-use previous frame for path tracing
+  rerender();
 }
 
 function loadVertShader(gl: WebGL2RenderingContext) {
@@ -140,10 +156,11 @@ async function loadProgram(gl: WebGL2RenderingContext, nLevels: number) {
   const vertShader = loadVertShader(gl);
   const fragShader = await loadFragShader(gl, nLevels);
 
-  if (!gl.getShaderParameter(fragShader, gl.COMPILE_STATUS)
-    || !gl.getShaderParameter(vertShader, gl.COMPILE_STATUS)) {
-    throw new Error('Shader compilation failure');
-  }
+  // Proper error is printed when we don't check for errors
+  // if (!gl.getShaderParameter(fragShader, gl.COMPILE_STATUS)
+  //   || !gl.getShaderParameter(vertShader, gl.COMPILE_STATUS)) {
+  //   throw new Error('Shader compilation failure');
+  // }
 
   program = gl.createProgram();
   gl.attachShader(program, vertShader);
@@ -165,12 +182,16 @@ async function loadProgram(gl: WebGL2RenderingContext, nLevels: number) {
 async function loadScene() {
 
   const svdag = new SVDAG();
-  await loadSceneStream(svdag);
 
-  // const response = await fetch(state.scenePath);
-  // svdag.load(await response.arrayBuffer());
-  // svdag.nodesLoadedOffset = svdag.nNodes;
-  // uploadTexData(svdag, svdag.nNodes);
+  // Option 1: Progressively upload to GPU as every chunk of the file is fetched 
+  // await loadSceneStream(svdag);
+  
+  
+  // Option 2: Wait until file is completely fetched before uploading to GPU memory
+  const response = await fetch(state.scenePath);
+  svdag.load(await response.arrayBuffer());
+  svdag.nodesLoadedOffset = svdag.nNodes;
+  uploadTexData(svdag, svdag.nNodes);
 
   console.log(`Levels: ${svdag.nLevels}, nodes: ${svdag.nNodes}`);
   console.log(`Bbox:\n\t[${svdag.bboxStart}]\n\t[${svdag.bboxEnd}]\n\t(center: [${svdag.bboxCenter}])`);
@@ -179,6 +200,7 @@ async function loadScene() {
 }
 
 async function loadSceneStream(svdag: SVDAG) {
+  console.log('Loading', state.scenePath, '...');
   const response = await fetch(state.scenePath);
   const reader = response.body.getReader();
 
@@ -186,16 +208,21 @@ async function loadSceneStream(svdag: SVDAG) {
   const { done, value } = await reader.read();
   svdag.loadChunk(value);
   
+  uploadTexData(svdag, svdag.nodesLoadedOffset);
+  
   // console.log(`Levels: ${svdag.nLevels}, nodes: ${svdag.nodes.length}`);
   // console.log(`Bbox:\n\t[${svdag.bboxStart}]\n\t[${svdag.bboxEnd}]\n\t(center: [${svdag.bboxCenter}])`);
 
   const loadNodesPromise = new Promise(async () => {
+    
+    // uploadTexData(svdag, value.byteLength / 4);
+
     while (true) {
       const { done, value } = await reader.read();
       if (done) {
         break;
       }
-      console.log(`Received ${value.byteLength} bytes`);
+      console.log(`Received ${value.byteLength} bytes (${value.length / 1000000} MB)`);
 
       // Load in SVDAG in RAM
       svdag.loadChunk(value);
@@ -207,9 +234,15 @@ async function loadSceneStream(svdag: SVDAG) {
       // gl.texSubImage3D(gl.TEXTURE_3D, 0, gl.R32UI, maxT3DTexels, maxT3DTexels, depthLayers, 0, gl.RED_INTEGER, gl.UNSIGNED_INT, textureData);
 
     }
+
+    return;
   });
 
-  loadNodesPromise.then(() => console.log('Finished loading!'));
+  loadNodesPromise.then(() => {
+    console.log('Finished loading!');
+    
+    uploadTexData(svdag, svdag.nNodes);
+  });
 }
 
 function getProjectionFactor(pixelTolerance: number, screenDivisor: number) {
@@ -245,7 +278,6 @@ async function setInitialUniforms() {
   gl.uniformMatrix4fv(uViewMatInv, false, camera.viewMatInv);
   const uProjMatInv = gl.getUniformLocation(program, 'projMatInv');
   gl.uniformMatrix4fv(uProjMatInv, false, camera.projMatInv);
-
 }
 
 async function createTexture(gl: WebGL2RenderingContext, svdag: SVDAG) {
@@ -273,27 +305,41 @@ async function uploadTexData(svdag: SVDAG, nNewNodes: number) {
   const neededTexels = svdag.nodes.length;
   const depthLayers = Math.ceil(neededTexels / maxT3DTexelsPow2);
   const nTexelsToAllocate = maxT3DTexelsPow2 * depthLayers;
-  if (svdag.nodes.length != nTexelsToAllocate) {
-    const paddedNodes = new Uint32Array(nTexelsToAllocate);
-    paddedNodes.set(svdag.nodes);
-    svdag.nodes = paddedNodes;
-  }
 
   const chunkStart = svdag.nodesLoadedOffset - nNewNodes;
-  const newNodes = svdag.nodes.slice(chunkStart, svdag.nodesLoadedOffset);
 
-  const xOffset = chunkStart % maxT3DTexels;
-  const yOffset = Math.floor(chunkStart / maxT3DTexels) % maxT3DTexels;
-  const zOffset = Math.floor(chunkStart / maxT3DTexelsPow2) % maxT3DTexels;
+  if (chunkStart === 0) {
+    console.log(`Initial uploading of nodes to 3D texture (Resolution: ${maxT3DTexels} x ${maxT3DTexels} x ${depthLayers}, nNodes: ${svdag.nodesLoadedOffset}/${svdag.nodes.length})...`);
 
-  gl.texStorage3D(gl.TEXTURE_3D, 0, gl.R32UI, maxT3DTexels, maxT3DTexels, depthLayers);
-  
-  if (chunkStart < 0) {
-    console.log(`Initial uploading of nodes to 3D texture (Resolution: ${maxT3DTexels} x ${maxT3DTexels} x ${depthLayers}, nNodes: ${svdag.nodesLoadedOffset}/${svdag.nNodes})...`);
+    if (svdag.nodes.length != nTexelsToAllocate) {
+      console.log('Resizing node buffer from ', svdag.nodes.length, 'to', nTexelsToAllocate, '(3D Texture padding)');
+      const paddedNodes = new Uint32Array(nTexelsToAllocate);
+      paddedNodes.set(svdag.nodes);
+      svdag.nodes = paddedNodes;
+    }
+    
+    // gl.texStorage3D(gl.TEXTURE_3D, 1, gl.R32UI, maxT3DTexels, maxT3DTexels, depthLayers);
+    // gl.texSubImage3D(gl.TEXTURE_3D, 0, 0, 0, 0, maxT3DTexels, maxT3DTexels, depthLayers, gl.RED_INTEGER, gl.UNSIGNED_INT, svdag.nodes);
+   
     gl.texImage3D(gl.TEXTURE_3D, 0, gl.R32UI, maxT3DTexels, maxT3DTexels, depthLayers, 0, gl.RED_INTEGER, gl.UNSIGNED_INT, svdag.nodes);
   } else {
-    console.log(`Update uploading of nodes to 3D texture (nNodes: ${svdag.nodesLoadedOffset}/${svdag.nNodes} [${Math.round(svdag.nodesLoadedOffset / svdag.nNodes * 100) }%])...`);
-    gl.texSubImage3D(gl.TEXTURE_3D, 0, xOffset, yOffset, zOffset, maxT3DTexels, maxT3DTexels, depthLayers, gl.RED_INTEGER, gl.UNSIGNED_INT, newNodes);
+    const xOffset = 0;
+    const yOffset = Math.floor(chunkStart / maxT3DTexels) % maxT3DTexels;
+    const zOffset = Math.floor(chunkStart / maxT3DTexelsPow2) % maxT3DTexels;
+
+    const updateWidth = maxT3DTexels;
+    const updateHeight = Math.ceil(svdag.nodesLoadedOffset / maxT3DTexels) % maxT3DTexels - yOffset;
+    const updateDepth = 1;
+    
+    const newNodes = svdag.nodes.slice(
+      yOffset * maxT3DTexels + zOffset * maxT3DTexelsPow2,
+      maxT3DTexels + updateHeight * maxT3DTexels + zOffset * maxT3DTexelsPow2,
+    );
+  
+    console.log(`Update uploading of nodes to 3D texture (${svdag.nodesLoadedOffset}/${svdag.nodes.length} [${Math.round(svdag.nodesLoadedOffset / svdag.nodes.length * 100) }%])...`);
+    console.log('Offset: ', xOffset, yOffset, zOffset);
+    // gl.texStorage3D(gl.TEXTURE_3D, 1, gl.R32UI, maxT3DTexels, maxT3DTexels, depthLayers);
+    gl.texSubImage3D(gl.TEXTURE_3D, 0, xOffset, yOffset, zOffset, updateWidth, updateHeight, updateDepth, gl.RED_INTEGER, gl.UNSIGNED_INT, newNodes);
   }
 
   // gl.texSubImage3D()
@@ -334,7 +380,7 @@ function render() {
 
   state.frame++;
 
-  requestAnimationFrame(render);
+  rerender();
 }
 
 window.addEventListener('load', init);
