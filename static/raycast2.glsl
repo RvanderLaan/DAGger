@@ -181,8 +181,8 @@ bool check_voxel(in vec3 target_pos) {
     cell_size *= 0.5;
 
     // Find in which child cell the target position falls
-    vec3 parent_center = vec3(target_pos * 2. + 1.) * cell_size;
-    ivec3 child_pos = ivec3(lessThan(parent_center, vec3(global_index)));
+    vec3 parent_center = vec3(global_index * 2 + 1) * cell_size;
+    ivec3 child_pos = ivec3(lessThan(parent_center, target_pos));
     uint linear_child_index = uint(child_pos.z + 2 * (child_pos.y + 2 * child_pos.x));
 
     global_index = global_index * 2 + child_pos;
@@ -276,18 +276,20 @@ void main(void) {
 
   traversal_status ts = trace_ray(r);
 
-  fragColor = vec4(vec3(maxIters - ts.iteration) / vec3(maxIters), 1);
-  return;
+  // return;
+  vec3 its = vec3(maxIters - ts.iteration) / vec3(maxIters);
 
-  // if (ts.t_current >= 0.) {           // intersection
-  //   fragColor = vec4(vec3(1. - ts.t_current / rootHalfSide), 1);
-  // } else if (ts.t_current >= -2.) {   // reached bbox end, no intersection (green)
-  //   fragColor = vec4(0, 1, 0, 1);
-  // } else if (ts.t_current >= -3.) {   // too many iters (red)
-  //   fragColor = vec4(1, 0, 0, 1);
-  // } else if (ts.t_current >= -4.) {   // out of bbox (purple)
-  //   fragColor = vec4(1, 0, 1, 1);
-  // } else {                            // else (ray dir: shouldn't happen)
-  //   fragColor = vec4(r.d, 1);
-  // }
+  if (ts.t_current >= 0.) {           // intersection
+    fragColor = vec4(vec3(1. - ts.t_current / rootHalfSide), 1);
+  } else if (ts.t_current >= -2.) {   // reached bbox end, no intersection (green)
+  
+    fragColor = vec4(0, its.x, 0, 1);
+    // fragColor = vec4(0, 1, 0, 1);
+  } else if (ts.t_current >= -3.) {   // too many iters (red)
+    fragColor = vec4(1, 0, 0, 1);
+  } else if (ts.t_current >= -4.) {   // out of bbox (purple)
+    fragColor = vec4(1, 0, 1, 1);
+  } else {                            // else (ray dir: shouldn't happen)
+    fragColor = vec4(r.d, 1);
+  }
 }
