@@ -62,8 +62,9 @@ struct traversal_status {
 	uint level;
 };
 
+// TODO: Get rid of mirror mask stuff
 void stack_push(in int node, in uint hdr, in ivec3 mirror_mask, in uint level) {
-	int mask = mirror_mask.x | (mirror_mask.y << 1) | (mirror_mask.z << 2) | int(level << 3);
+	int mask = int(level << 3);
 	stack[stack_size] = ivec3(node, hdr, mask);
 	++stack_size;
 }
@@ -92,11 +93,15 @@ uint voxel_to_linear_idx(in ivec3 mirror_mask, in ivec3 idx, in int sz) {
 #define LEAF_SIZE 2
 
 int myFetch(in int idx) {
+	// On AMD GPUs this causes some problems for files > 32 MM. Took some time to find this out
+	// The idx is signed, so cast it to unsigned
+	uint uIdx = uint(idx);
+
 	return int(texelFetch(nodes, 
 		ivec3(
-			idx % TEX3D_SIZE,
-			(idx/TEX3D_SIZE) % TEX3D_SIZE,
-			idx/(TEX3D_SIZE_POW2)
+			uIdx % TEX3D_SIZE,
+			(uIdx/TEX3D_SIZE) % TEX3D_SIZE,
+			uIdx/(TEX3D_SIZE_POW2)
 		), 0
 	).x);
 }
@@ -325,9 +330,8 @@ vec4 trace_ray(in Ray r, in vec2 t_min_max, const in float projection_factor, ou
 	ts.t_current = t_min_max.x;
 	init(r, ts);
 
-	
-	// fragColor = vec4(ts.inv_ray_d, 1);
-	// return vec4(0);
+
+	float i = 0.;
 
 	ivec3 stepDir = ivec3(0);
 	
@@ -335,6 +339,13 @@ vec4 trace_ray(in Ray r, in vec2 t_min_max, const in float projection_factor, ou
 	uint max_level = min(INNER_LEVELS, drawLevel-1u);
 	do {
 		bool full_voxel = fetch_voxel_bit(ts);
+
+		// if (i >= 6.) {
+		// fragColor = vec4(ts.inv_ray_d, 1);
+		// return vec4(0);
+
+		// }
+		// i += 1.;
 	  
 		if (!full_voxel) {
 			stepDir = dda_next(ts);

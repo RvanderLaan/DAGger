@@ -132,13 +132,14 @@ async function loadFragShader(gl: WebGL2RenderingContext, nLevels: number) {
   const maxT3DTexels = gl.getParameter(gl.MAX_3D_TEXTURE_SIZE);
   const maxT3DTexelsPow2 = maxT3DTexels * maxT3DTexels;
 
-  const shaderSrcRes = await fetch('raycast.glsl');
+  // const shaderSrcRes = await fetch('raycast.glsl');
+  const shaderSrcRes = await fetch('raycast2.glsl');
   let shaderSrc = await shaderSrcRes.text();
 
   const defines = `#version 300 es
 #define INNER_LEVELS ${nLevels - 1}u
-#define TEX3D_SIZE ${maxT3DTexels}
-#define TEX3D_SIZE_POW2 ${maxT3DTexelsPow2}
+#define TEX3D_SIZE ${maxT3DTexels}u
+#define TEX3D_SIZE_POW2 ${maxT3DTexelsPow2}u
 `;
 
   // Replace the first few lines from shaderSrc with defines
@@ -265,7 +266,7 @@ async function setInitialUniforms() {
   const uSceneCenter = gl.getUniformLocation(program, 'sceneCenter');
   gl.uniform3fv(uSceneCenter, scene.bboxCenter);
   const uRootHalfSide = gl.getUniformLocation(program, 'rootHalfSide');
-  gl.uniform1f(uRootHalfSide, scene.rootSide / 2); // todo: divide by 1 << (drawLevel + 1)
+  gl.uniform1f(uRootHalfSide, scene.rootSide / 2.0); // todo: divide by 1 << (drawLevel + 1). This is just / 2
 
   const uMaxIters = gl.getUniformLocation(program, 'maxIters');
   gl.uniform1ui(uMaxIters, state.maxIterations);
