@@ -92,26 +92,22 @@ uint voxel_to_linear_idx(in ivec3 mirror_mask, in ivec3 idx, in int sz) {
 // SVDAG data fetching
 #define LEAF_SIZE 2
 
-int myFetch(in int idx) {
-	// On AMD GPUs this causes some problems for files > 32 MM. Took some time to find this out
-	// The idx is signed, so cast it to unsigned
-	uint uIdx = uint(idx);
-
-	return int(texelFetch(nodes, 
+uint myFetch(in int idx) {
+	return texelFetch( nodes, 
 		ivec3(
-			uIdx % TEX3D_SIZE,
-			(uIdx/TEX3D_SIZE) % TEX3D_SIZE,
-			uIdx/(TEX3D_SIZE_POW2)
+			idx % TEX3D_SIZE,
+			(idx/TEX3D_SIZE) % TEX3D_SIZE,
+			idx/(TEX3D_SIZE_POW2)
 		), 0
-	).x);
+	).x;
 }
 
 bool fetch_voxel_bit(in traversal_status ts) {
-	return (int(ts.hdr) & (1 << int(ts.child_linear_index))) != 0;
+	return (ts.hdr & (1u << ts.child_linear_index)) != 0u;
 }
 
 void fetch_data(inout traversal_status ts) {
-	ts.hdr = uint(myFetch(ts.node_index));
+	ts.hdr = myFetch(ts.node_index);
 }
 
 // Counts amount of bits in 8 bit int
@@ -124,8 +120,8 @@ uint bitCount(in uint num) {
 }
 
 void fetch_child_index_in(inout traversal_status ts) {
-	uint childPtrPos = bitCount(ts.hdr & 0xFFu >> ts.child_linear_index);
-	ts.node_index = (myFetch(ts.node_index + int(childPtrPos)));
+	uint childPtrPos = bitCount((ts.hdr & 0xFFu) >> ts.child_linear_index);
+	ts.node_index = int(myFetch(ts.node_index + int(childPtrPos)));
 }
 
 
@@ -216,7 +212,7 @@ void up_in(in Ray r, inout traversal_status ts) {
 
 void go_down_one_level(in Ray r, inout traversal_status ts) {
 	++ts.level;
-	ts.cell_size*=0.5;
+	ts.cell_size *= 0.5;
 	
 	// Init ts idx, t_next_crossing, local_idx using octree point location
 	vec3 p_a = r.o + ts.t_current * r.d;		

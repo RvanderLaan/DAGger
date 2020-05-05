@@ -132,14 +132,14 @@ async function loadFragShader(gl: WebGL2RenderingContext, nLevels: number) {
   const maxT3DTexels = gl.getParameter(gl.MAX_3D_TEXTURE_SIZE);
   const maxT3DTexelsPow2 = maxT3DTexels * maxT3DTexels;
 
-  // const shaderSrcRes = await fetch('raycast.glsl');
-  const shaderSrcRes = await fetch('raycast2.glsl');
+  const shaderSrcRes = await fetch('raycast.glsl');
+  // const shaderSrcRes = await fetch('raycast2.glsl');
   let shaderSrc = await shaderSrcRes.text();
 
   const defines = `#version 300 es
 #define INNER_LEVELS ${nLevels - 1}u
-#define TEX3D_SIZE ${maxT3DTexels}u
-#define TEX3D_SIZE_POW2 ${maxT3DTexelsPow2}u
+#define TEX3D_SIZE ${maxT3DTexels}
+#define TEX3D_SIZE_POW2 ${maxT3DTexelsPow2}
 `;
 
   // Replace the first few lines from shaderSrc with defines
