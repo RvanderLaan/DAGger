@@ -3,6 +3,13 @@ import { vec3 } from "gl-matrix";
 import Camera from "./Camera";
 import OrbitController from "./OrbitController";
 
+enum RenderMode {
+  ITERATIONS = 0,
+  DEPTH = 1,
+  DIFFUSE_LIGHTING = 2,
+  PATH_TRACING = 3,
+}
+
 interface IRendererState {
   startTime: number;
   time: number;
@@ -12,6 +19,9 @@ interface IRendererState {
   drawLevel: number,
   maxIterations: number,
   scenePath: string,
+  moveSpeed: number,
+  renderMode: RenderMode;
+  showUniqueNodeColors: boolean;
 }
 
 const state: IRendererState = {
@@ -23,11 +33,15 @@ const state: IRendererState = {
   drawLevel: 1,
   maxIterations: 250,
   scenePath: 'examples/sponza_11.svdag',
+  moveSpeed: 1,
+  renderMode: RenderMode.ITERATIONS,
+  showUniqueNodeColors: false,
 };
 
 let canvas: HTMLCanvasElement;
 let gl: WebGL2RenderingContext;
 let program: WebGLProgram;
+let fragShader: WebGLShader;
 let texture: WebGLTexture;
 let controller: OrbitController;
 let scene: SVDAG;
@@ -46,14 +60,70 @@ function setRenderScale(num: number) {
 (window as any).setRenderScale = setRenderScale.bind(this);
 
 function setDrawLevel(num: number) {
-  state.drawLevel = Math.max(1, Math.min(num, scene.nLevels));
+  state.drawLevel = num; // Math.max(1, Math.min(num, scene.nLevels));
+  (document.getElementById('drawLevel') as HTMLInputElement).value = `${state.drawLevel}`;
 }
 (window as any).setDrawLevel = setDrawLevel.bind(this);
+
+function setRenderMode(num: RenderMode) {
+  console.log('setting render mode', num)
+  state.renderMode = num; // Math.max(1, Math.min(num, scene.nLevels));
+  (document.getElementById('renderMode') as HTMLInputElement).value = `${state.renderMode}`;
+}
+(window as any).setRenderMode = setRenderMode.bind(this);
+
+function setMoveSpeed(num: number | string) {
+  state.moveSpeed = typeof num === 'number' ? num : parseFloat(num);
+  (document.getElementById('moveSpeed') as HTMLInputElement).value = state.moveSpeed.toFixed(1);
+  controller.moveSpeed = state.moveSpeed;
+}
+(window as any).setMoveSpeed = setMoveSpeed.bind(this);
 
 function setMaxIterations(num: number) {
   state.maxIterations = Math.max(0, Math.min(num, 1000));
 }
 (window as any).setMaxIterations = setMaxIterations.bind(this);
+
+function setShowUniqueColors(val: boolean) {
+  state.showUniqueNodeColors = val;
+  console.log(val)
+}
+(window as any).setShowUniqueColors = setShowUniqueColors.bind(this);
+
+
+async function loadSelectedScene() {
+  const selector = document.getElementById('sceneSelector') as HTMLSelectElement;
+  state.scenePath = selector.options[selector.selectedIndex].value;
+
+  // TODO: Dispose current scene first
+  gl.deleteTexture(texture);
+
+  // TODO: In theory, you could only host the highest res, and just do a partial load 
+
+  // Need to recompile the frag shader, since it relies on #defines for the max # levels // TODO: 
+  // gl.detachShader(program, fragShader);
+  // gl.deleteShader(fragShader);
+  // fragShader
+
+  const oldBboxCenter = scene.bboxCenter;
+
+  texture = await createTexture(gl);
+  scene = await loadScene();
+
+  console.log(scene.nLevels);
+  setDrawLevel(scene.nLevels);
+
+  // If the bbox center is different, it's probably a new scene, so reset camera
+  if (vec3.dist(oldBboxCenter, scene.bboxCenter) > 0.001) {
+    camera.position.set(scene.bboxEnd);
+    camera.target.set(scene.bboxCenter);
+    camera.updateMatrices();
+    setMoveSpeed(vec3.distance(scene.bboxStart, scene.bboxEnd) * 0.01);
+  }
+
+  setInitialUniforms();
+}
+(window as any).loadSelectedScene = loadSelectedScene.bind(this);
 
 async function init() {
   canvas = document.querySelector("#glCanvas");
@@ -76,23 +146,24 @@ async function init() {
   gl.clearColor(0.0, 0.0, 0.0, 1.0);
   gl.clear(gl.COLOR_BUFFER_BIT);
 
-  texture = await createTexture(gl, scene);
+  texture = await createTexture(gl);
   scene = await loadScene();
 
   setDrawLevel(scene.nLevels);
 
-  program = await loadProgram(gl, scene.nLevels);
+  [program, fragShader] = await loadProgram(gl, scene.nLevels);
 
   gl.enable(gl.DEPTH_TEST);
 
 
-  camera.position.set(scene.bboxStart);
+  camera.position.set(scene.bboxEnd);
   camera.target.set(scene.bboxCenter);
   camera.updateMatrices();
 
   setInitialUniforms();
 
-  controller = new OrbitController(camera, vec3.distance(scene.bboxStart, scene.bboxEnd) * 0.1);
+  controller = new OrbitController(camera, 1);
+  setMoveSpeed(vec3.distance(scene.bboxStart, scene.bboxEnd) * 0.1);
 
   canvas.tabIndex = 0;
   canvas.addEventListener('keydown', controller.onKeyDown.bind(controller));
@@ -137,7 +208,7 @@ async function loadFragShader(gl: WebGL2RenderingContext, nLevels: number) {
   let shaderSrc = await shaderSrcRes.text();
 
   const defines = `#version 300 es
-#define INNER_LEVELS ${nLevels - 1}u
+#define INNER_LEVELS ${nLevels *2 - 1}u
 #define TEX3D_SIZE ${maxT3DTexels}
 #define TEX3D_SIZE_POW2 ${maxT3DTexelsPow2}
 `;
@@ -152,7 +223,7 @@ async function loadFragShader(gl: WebGL2RenderingContext, nLevels: number) {
   return shader;
 }
 
-async function loadProgram(gl: WebGL2RenderingContext, nLevels: number) {  
+async function loadProgram(gl: WebGL2RenderingContext, nLevels: number) {
   // Setup shaders
   const vertShader = loadVertShader(gl);
   const fragShader = await loadFragShader(gl, nLevels);
@@ -177,10 +248,11 @@ async function loadProgram(gl: WebGL2RenderingContext, nLevels: number) {
 
   gl.useProgram(program);
 
-  return program;
+  return [program, fragShader];
 }
 
 async function loadScene() {
+  console.log(`Loading "${state.scenePath}"...`);
 
   const svdag = new SVDAG();
 
@@ -191,7 +263,7 @@ async function loadScene() {
   // Option 2: Wait until file is completely fetched before uploading to GPU memory
   const response = await fetch(state.scenePath);
   svdag.load(await response.arrayBuffer());
-  svdag.nodesLoadedOffset = svdag.nNodes;
+  svdag.dataLoadedOffset = svdag.nNodes;
   uploadTexData(svdag, svdag.nNodes);
 
   console.log(`Levels: ${svdag.nLevels}, nodes: ${svdag.nNodes}`);
@@ -209,14 +281,15 @@ async function loadSceneStream(svdag: SVDAG) {
   const { done, value } = await reader.read();
   svdag.loadChunk(value);
   
-  uploadTexData(svdag, svdag.nodesLoadedOffset);
+  uploadTexData(svdag, svdag.dataLoadedOffset);
+  // return;
   
   // console.log(`Levels: ${svdag.nLevels}, nodes: ${svdag.nodes.length}`);
   // console.log(`Bbox:\n\t[${svdag.bboxStart}]\n\t[${svdag.bboxEnd}]\n\t(center: [${svdag.bboxCenter}])`);
 
   const loadNodesPromise = new Promise(async () => {
-    
-    // uploadTexData(svdag, value.byteLength / 4);
+  
+    let lastUpload = new Date();
 
     while (true) {
       const { done, value } = await reader.read();
@@ -229,11 +302,11 @@ async function loadSceneStream(svdag: SVDAG) {
       svdag.loadChunk(value);
   
       // Upload to GPU
-      uploadTexData(svdag, value.byteLength / 4);
-      
-      // gl.texImage3D(gl.TEXTURE_3D, 0, gl.R32UI, maxT3DTexels, maxT3DTexels, depthLayers, 0, gl.RED_INTEGER, gl.UNSIGNED_INT, textureData);
-      // gl.texSubImage3D(gl.TEXTURE_3D, 0, gl.R32UI, maxT3DTexels, maxT3DTexels, depthLayers, 0, gl.RED_INTEGER, gl.UNSIGNED_INT, textureData);
-
+      const d = new Date();
+      if (d.getTime() - lastUpload.getTime() > 1000) {
+        uploadTexData(svdag, value.byteLength / 4);
+        lastUpload = d;
+      }
     }
 
     return;
@@ -242,7 +315,7 @@ async function loadSceneStream(svdag: SVDAG) {
   loadNodesPromise.then(() => {
     console.log('Finished loading!');
     
-    uploadTexData(svdag, svdag.nNodes);
+    // uploadTexData(svdag, svdag.nNodes);
   });
 }
 
@@ -266,7 +339,10 @@ async function setInitialUniforms() {
   const uSceneCenter = gl.getUniformLocation(program, 'sceneCenter');
   gl.uniform3fv(uSceneCenter, scene.bboxCenter);
   const uRootHalfSide = gl.getUniformLocation(program, 'rootHalfSide');
-  gl.uniform1f(uRootHalfSide, scene.rootSide / 2.0); // todo: divide by 1 << (drawLevel + 1). This is just / 2
+  gl.uniform1f(uRootHalfSide, scene.rootSide / 2.0);
+
+  const uLightPos = gl.getUniformLocation(program, 'rootHalfSide');
+  gl.uniform3fv(uLightPos, camera.position);
 
   const uMaxIters = gl.getUniformLocation(program, 'maxIters');
   gl.uniform1ui(uMaxIters, state.maxIterations);
@@ -274,6 +350,12 @@ async function setInitialUniforms() {
   gl.uniform1ui(uDrawLevel, state.drawLevel);
   const uProjectionFactor = gl.getUniformLocation(program, 'projectionFactor');
   gl.uniform1f(uProjectionFactor, getProjectionFactor(state.pixelTolerance, 1));
+  
+  const uUniqueColors = gl.getUniformLocation(program, 'uniqueColors');
+  gl.uniform1i(uUniqueColors, state.showUniqueNodeColors ? 1 : 0);
+  
+  const uRenderMode = gl.getUniformLocation(program, 'viewerRenderMode');
+  gl.uniform1i(uRenderMode, state.renderMode);
 
   const uViewMatInv = gl.getUniformLocation(program, 'viewMatInv');
   gl.uniformMatrix4fv(uViewMatInv, false, camera.viewMatInv);
@@ -281,12 +363,7 @@ async function setInitialUniforms() {
   gl.uniformMatrix4fv(uProjMatInv, false, camera.projMatInv);
 }
 
-async function createTexture(gl: WebGL2RenderingContext, svdag: SVDAG) {
-  // const maxT3DTexelsPow2 = maxT3DTexels * maxT3DTexels;
-  // const neededTexels = svdag.nodes.length;
-  // const depthLayers = Math.ceil(neededTexels / maxT3DTexelsPow2);
-  // const texelsToAllocate = maxT3DTexelsPow2 * depthLayers;
-
+async function createTexture(gl: WebGL2RenderingContext) {
   const texture = gl.createTexture();
   gl.activeTexture(gl.TEXTURE0);
   gl.bindTexture(gl.TEXTURE_3D, texture);
@@ -295,9 +372,6 @@ async function createTexture(gl: WebGL2RenderingContext, svdag: SVDAG) {
   gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_S, gl.REPEAT);
   gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_T, gl.REPEAT);
   gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_R, gl.REPEAT);
-
-  // uploadTexData(svdag, );
-  // gl.texImage3D(gl.TEXTURE_3D, 0, gl.R32UI, maxT3DTexels, maxT3DTexels, depthLayers, 0, gl.RED_INTEGER, gl.UNSIGNED_INT, textureData);
   return texture;
 }
 
@@ -307,10 +381,10 @@ async function uploadTexData(svdag: SVDAG, nNewNodes: number) {
   const depthLayers = Math.ceil(neededTexels / maxT3DTexelsPow2);
   const nTexelsToAllocate = maxT3DTexelsPow2 * depthLayers;
 
-  const chunkStart = svdag.nodesLoadedOffset - nNewNodes;
+  const chunkStart = svdag.dataLoadedOffset - nNewNodes;
 
   if (chunkStart === 0) {
-    console.log(`Initial uploading of nodes to 3D texture (Resolution: ${maxT3DTexels} x ${maxT3DTexels} x ${depthLayers}, nNodes: ${svdag.nodesLoadedOffset}/${svdag.nodes.length})...`);
+    console.log(`Initial uploading of nodes to 3D texture (Resolution: ${maxT3DTexels} x ${maxT3DTexels} x ${depthLayers}, nNodes: ${svdag.dataLoadedOffset}/${svdag.nodes.length})...`);
 
     if (svdag.nodes.length != nTexelsToAllocate) {
       console.log('Resizing node buffer from ', svdag.nodes.length, 'to', nTexelsToAllocate, '(3D Texture padding)');
@@ -319,17 +393,17 @@ async function uploadTexData(svdag: SVDAG, nNewNodes: number) {
       svdag.nodes = paddedNodes;
     }
     
-    // gl.texStorage3D(gl.TEXTURE_3D, 1, gl.R32UI, maxT3DTexels, maxT3DTexels, depthLayers);
-    // gl.texSubImage3D(gl.TEXTURE_3D, 0, 0, 0, 0, maxT3DTexels, maxT3DTexels, depthLayers, gl.RED_INTEGER, gl.UNSIGNED_INT, svdag.nodes);
+    gl.texStorage3D(gl.TEXTURE_3D, 1, gl.R32UI, maxT3DTexels, maxT3DTexels, depthLayers);
+    gl.texSubImage3D(gl.TEXTURE_3D, 0, 0, 0, 0, maxT3DTexels, maxT3DTexels, depthLayers, gl.RED_INTEGER, gl.UNSIGNED_INT, svdag.nodes);
    
-    gl.texImage3D(gl.TEXTURE_3D, 0, gl.R32UI, maxT3DTexels, maxT3DTexels, depthLayers, 0, gl.RED_INTEGER, gl.UNSIGNED_INT, svdag.nodes);
+    // gl.texImage3D(gl.TEXTURE_3D, 0, gl.R32UI, maxT3DTexels, maxT3DTexels, depthLayers, 0, gl.RED_INTEGER, gl.UNSIGNED_INT, svdag.nodes);
   } else {
     const xOffset = 0;
     const yOffset = Math.floor(chunkStart / maxT3DTexels) % maxT3DTexels;
     const zOffset = Math.floor(chunkStart / maxT3DTexelsPow2) % maxT3DTexels;
 
     const updateWidth = maxT3DTexels;
-    const updateHeight = Math.ceil(svdag.nodesLoadedOffset / maxT3DTexels) % maxT3DTexels - yOffset;
+    const updateHeight = Math.ceil(svdag.dataLoadedOffset / maxT3DTexels) % maxT3DTexels - yOffset;
     const updateDepth = 1;
     
     const newNodes = svdag.nodes.slice(
@@ -337,10 +411,11 @@ async function uploadTexData(svdag: SVDAG, nNewNodes: number) {
       maxT3DTexels + updateHeight * maxT3DTexels + zOffset * maxT3DTexelsPow2,
     );
   
-    console.log(`Update uploading of nodes to 3D texture (${svdag.nodesLoadedOffset}/${svdag.nodes.length} [${Math.round(svdag.nodesLoadedOffset / svdag.nodes.length * 100) }%])...`);
+    console.log(`Update uploading to 3D texture (${svdag.dataLoadedOffset}/${svdag.nodes.length} [${Math.round(svdag.dataLoadedOffset / svdag.nodes.length * 100) }%])...`);
     console.log('Offset: ', xOffset, yOffset, zOffset);
     // gl.texStorage3D(gl.TEXTURE_3D, 1, gl.R32UI, maxT3DTexels, maxT3DTexels, depthLayers);
-    gl.texSubImage3D(gl.TEXTURE_3D, 0, xOffset, yOffset, zOffset, updateWidth, updateHeight, updateDepth, gl.RED_INTEGER, gl.UNSIGNED_INT, newNodes);
+    // gl.texSubImage3D(gl.TEXTURE_3D, 0, xOffset, yOffset, zOffset, updateWidth, updateHeight, updateDepth, gl.RED_INTEGER, gl.UNSIGNED_INT, newNodes);
+    gl.texSubImage3D(gl.TEXTURE_3D, 0, 0, 0, 0, maxT3DTexels, maxT3DTexels, depthLayers, gl.RED_INTEGER, gl.UNSIGNED_INT, svdag.nodes);
   }
 
   // gl.texSubImage3D()
@@ -359,9 +434,29 @@ function render() {
     fpsCountTime = Date.now();
     document.title = `DAGger - ${fpsCount} FPS`;
     fpsCount = 0;
+
+    // console.log('Voxel at cam pos: ', scene.getVoxel(camera.position));
+
   }
   fpsCount++;
 
+  const hit = scene.castRay(camera.position, vec3.fromValues(0, -1, 0), 100);
+
+  const linearGravity = scene.rootSide / 1000;
+  const delta = vec3.fromValues(0, 0, 0);
+  if (!hit) {
+    delta[1] = -linearGravity;
+  } else {
+    const dist = vec3.dist(hit.hitPos, camera.position);
+    console.log(dist, hit.maxRayLength)
+    if (dist < 0.8 * hit.maxRayLength) {
+      delta[1] = 1000 / dist;
+    }
+  }
+  // const delta = vec3.sub(vec3.create(), hit.hitPos, camera.position);
+  vec3.add(camera.position, camera.position, delta);
+  vec3.add(camera.target, camera.target, delta);
+  camera.updateMatrices();
 
   // Process input
   const dt = 0.001 * (Date.now() - lastFrameTime);

@@ -12,6 +12,7 @@ export class OrbitController {
   keyDownStatus: IKeyDownStatus;
 
   prevMousePos: vec2 = vec2.create();
+  mousePos: vec2 = vec2.create();
 
   constructor(
     public camera: Camera,
@@ -32,7 +33,7 @@ export class OrbitController {
     let updated = false;
 
     if (this.keyDownStatus['shift']) {
-      dt *= 2;
+      dt *= 10;
     }
 
     if (this.keyDownStatus['w']) {
@@ -75,7 +76,6 @@ export class OrbitController {
         this.tmpDir, 
         vec3.sub(this.tmpDir, this.camera.target, this.camera.position));
       this.rotateAlongLocalY(0.5, dt);
-
     }
     if (this.keyDownStatus['e']) {
       updated = true;
@@ -85,9 +85,21 @@ export class OrbitController {
       this.rotateAlongLocalY(0.5, -dt);
     }
 
+    if (this.keyDownStatus['mouse-0']) {
+      updated = true;
+      const delta = vec2.subtract(vec2.create(), this.prevMousePos, this.mousePos);
+      vec2.divide(delta, delta, [document.documentElement.clientWidth, document.documentElement.clientHeight]);
+
+      const lookSpeed = 5;
+
+      this.rotateAlongLocalY(delta[0], lookSpeed);
+      this.rotateAlongLocalX(delta[1], -lookSpeed);
+    }
+
     if (updated) {
       this.camera.updateMatrices();
     }
+    this.prevMousePos.set(this.mousePos);
   }
 
   moveInDirection(dir: vec3, speed: number) {
@@ -96,8 +108,8 @@ export class OrbitController {
   }
 
   rotateAlongLocalY(amount: number, speed: number) {
-    mat4.rotate(this.tmpRotMat, mat4.identity(this.tmpRotMat), amount * speed, this.camera.upDir);
-    vec3.transformMat4(this.tmpDir, this.tmpDir, this.tmpRotMat);
+    const mat = mat4.rotate(mat4.create(), mat4.identity(mat4.create()), amount * speed, this.camera.upDir);
+    vec3.transformMat4(this.tmpDir, this.tmpDir, mat);
     vec3.scaleAndAdd(this.camera.target, this.camera.position, this.tmpDir, this.radius);
   }
 
@@ -126,39 +138,16 @@ export class OrbitController {
   }
 
   onMouseDown(e: MouseEvent) {
-    console.log('down', e);
     this.keyDownStatus[`mouse-${e.button}`] = true;
     this.prevMousePos.set([e.clientX, e.clientY]);
   }
   
   onMouseUp(e: MouseEvent) {
-    console.log('up', e);
     this.keyDownStatus[`mouse-${e.button}`] = false;
   }
 
-  onMouseMove(e: DragEvent) {
-    const mousePos = vec2.fromValues(e.clientX, e.clientY);
-    // console.log('move', e);
-    if (this.keyDownStatus['mouse-0']) {
-      const delta = vec2.subtract(vec2.create(), this.prevMousePos, mousePos);
-      vec2.divide(delta, delta, [document.documentElement.clientWidth, document.documentElement.clientHeight]);
-
-      const lookSpeed = 5;
-
-      this.rotateAlongLocalY(delta[0], lookSpeed);
-      this.rotateAlongLocalX(delta[1], -lookSpeed);
-
-      // const forward = vec3.subtract(vec3.create(), this.camera.target, this.camera.position);
-      // const dist = vec3.len(forward);
-      // vec3.normalize(forward, forward);
-
-
-
-      // mat4.rotate(this.camera.viewMat, this.camera.viewMat, rad, vec3.fromValues(0, 1, 0));
-      // this.camera.updatePosition();
-      this.camera.updateMatrices();
-    }
-    this.prevMousePos.set(mousePos);
+  onMouseMove(e: MouseEvent) {
+    this.mousePos.set(vec2.fromValues(e.clientX, e.clientY));
   }
 
   onMouseWheel(e: WheelEvent) {

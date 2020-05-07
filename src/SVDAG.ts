@@ -2,6 +2,16 @@ import { vec3, quat, mat4 } from 'gl-matrix';
 
 import Camera from './Camera';
 
+function bitCount(num: number) {
+  let n = num;
+  n = ((0xaa & n) >> 1) + (0x55 & n);
+  n = ((0xcc & n) >> 2) + (0x33 & n);
+  n = ((0xf0 & n) >> 4) + (0x0f & n);
+  return n;
+}
+
+const dec2bin = (dec: number) => (dec >>> 0).toString(2);
+
 export abstract class EncodedOctree {
   bboxStart: vec3 = vec3.create()
   bboxEnd: vec3 = vec3.create();
@@ -15,7 +25,8 @@ export class SVDAG extends EncodedOctree {
   nodes: Uint32Array;
 
   initialized: boolean = false;
-  nodesLoadedOffset: number = 0;
+  // byte offset (not 32 bit ints, but bytes)
+  dataLoadedOffset: number = 0;
 
   load(buffer: ArrayBuffer) {
     // Header
@@ -64,12 +75,76 @@ export class SVDAG extends EncodedOctree {
 
       console.log('first offset: ', lastOffset);
 
+      // if ((buffer.length - lastOffset) / 4 !== this.nodes.length) {
+        
+        // If the first chunk is not the whole scene, set all bytes to full (max 32 bit signed int: TODO: unsigned)
+        console.log('pre', this.nodes);
+        this.nodes.fill(Math.pow(2, 31) - 1);
+        
+        console.log('post', this.nodes);
+      // }
+
       this.loadChunk(buffer.slice(lastOffset));
     } else {
-      console.log(`Loading chunk containing ${buffer.length / 4} nodes...`);
-      this.nodes.set(new Uint32Array(buffer.buffer), this.nodesLoadedOffset);
-      this.nodesLoadedOffset += buffer.byteLength / 4;
+      console.log(`Loading chunk containing ${buffer.length} bytes...`);
+      this.nodes.set(new Uint32Array(buffer.buffer), this.dataLoadedOffset / 4);
+      this.dataLoadedOffset += buffer.length;
+      
+      // console.log('chunk', this.nodes);
     }
+  }
+
+  castRay(o: vec3, d: vec3, maxIters = 100): { nodeIndex: number, hitPos: vec3, maxRayLength: number } | null {
+    // const stack: number[] = []; // TODO: list of traversed node indices per level
+    
+    const stepSize = this.rootSide / Math.pow(2, this.nLevels - 1);
+
+    const p = vec3.copy(vec3.create(), o);
+    for (let i = 0; i < maxIters; i++) {
+      vec3.scaleAndAdd(p, p, d, stepSize);
+      const node = this.getVoxel(p);
+      if (node) {
+        return { ...node, maxRayLength: stepSize * maxIters };
+      }
+    }
+    return null;
+  }
+
+  getVoxel(pos: vec3): { nodeIndex: number, hitPos: vec3 } | null {
+    // Transform world position to the [0, 1] range
+    // const gridPos = vec3.scale(vec3.create(), pos, 1 / (2 * this.rootSide));
+    const nodeCenter = vec3.create();
+    nodeCenter.set(this.bboxCenter);
+
+    let nodeIndex = 0;
+
+    let hs = this.rootSide / 2;
+
+    for (let lev = 0; lev < this.nLevels; lev++) {
+      // console.log(lev, vec3.scale(vec3.create(), nodeCenter, 1 / this.rootSide));
+      const childIndex = (pos[0] > nodeCenter[0] ? 4 : 0)
+                       + (pos[1] > nodeCenter[1] ? 2 : 0)
+                       + (pos[2] > nodeCenter[2] ? 1 : 0);
+
+      const header = this.nodes[nodeIndex];
+
+      const hasChild = (header & (1 << childIndex)) !== 0;
+      if (!hasChild) {
+        return null;
+      } else if (lev === this.nLevels - 1) {
+        return { nodeIndex, hitPos: nodeCenter };
+      }
+
+      hs /= 2;
+
+      nodeCenter[0] += (pos[0] > nodeCenter[0]) ? hs : -hs;
+      nodeCenter[1] += (pos[1] > nodeCenter[1]) ? hs : -hs;
+      nodeCenter[2] += (pos[2] > nodeCenter[2]) ? hs : -hs;
+      
+      const childPtrOffset = bitCount(header >> childIndex);
+      nodeIndex = this.nodes[nodeIndex + childPtrOffset];
+    }
+    return null;
   }
 }
 
