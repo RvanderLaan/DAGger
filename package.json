@@ -1,5 +1,6 @@
 {
   "name": "dagger",
+  "homepage": "https://rvanderlaan.github.io/dagger",
   "version": "1.0.0",
   "description": "",
   "main": "./src/main.ts",
@@ -7,7 +8,9 @@
     "compile": "tsc",
     "watch": "webpack -w --mode=development",
     "serve": "python3 ./src/Server.py",
-    "deploy": "webpack --mode=production"
+    "build": "webpack --mode=production",
+    "predeploy": "yarn run build",
+    "deploy": "gh-pages -d build"
   },
   "author": "",
   "license": "ISC",
@@ -16,6 +19,7 @@
   },
   "devDependencies": {
     "@types/gl-matrix": "^2.4.5",
+    "gh-pages": "^2.2.0",
     "ts-loader": "^6.2.1",
     "typescript": "^3.6.4",
     "webpack": "^4.41.2",
