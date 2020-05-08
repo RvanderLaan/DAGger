@@ -1,0 +1,116 @@
+
+<header>
+
+  <style>
+    body {
+      margin: 0px;
+      background-color: slategray;
+      height: 100%;
+      position: relative;
+      font-family: sans-serif;
+      font-size: 14px;
+    }
+    canvas {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+    }
+    #overlay {
+      position: absolute;
+      top: 0%;
+      right: 0%;
+      width: 200px;
+      max-height: 250px;
+      background: rgba(20, 20, 20, 0.5);
+      color: white;
+      padding: 4px;
+    }
+    #overlay label {
+      padding-bottom: 6px;
+      display: inline-block;
+    }
+    #overlay input {
+      right: 4px;
+      position: absolute;
+      max-width: 25%;
+    }
+    a, a:visited {
+      color: white;
+    }
+  </style>
+</header>
+<body>
+  <canvas id="glCanvas"></canvas>
+  <div id="overlay">
+
+    <span><b><a href="https://github.com/RvanderLaan/DAGger" target="_blank">DAGger</a> settings</b></span>
+    <!-- TODO: minimize button -->
+    <!-- <button style="width: 10%; float: right">-</button> -->
+    <button style="width: 10%; float: right"
+      onclick="alert('Controls:\n-WASD to move around\n-QE to rotate\n-Drag LMB to rotate\n-Scroll to change move speed')"
+    >?</button>
+
+    <br />
+    
+    <!-- Todo: Tab for File, Renderer, Controller -->
+
+    <select style="width: 100%" id="sceneSelector">
+      <!-- Will be filled dynamically now -->
+    </select>
+
+    <button id="load" onclick="loadSelectedScene()">Load</button>
+
+    <br />
+
+    <label for="renderMode">Render mode</label>
+    <select id="renderMode" style="max-width: 50%; float: right" onchange="setRenderMode(this.value)">
+      <option value="0">Iterations</option>
+      <option value="1">Depth</option>
+      <option value="2">Diffuse lighting</option>
+      <option value="3" disabled>Path tracing</option>
+    </select>
+
+    <br />
+
+    <label for="renderScale" title="Down- or upscale the render resolution">
+      Render scale</label>
+    <input type="number" id="renderScale" min="0.25" max="2.0" value="1.0" step="0.25"
+      onchange="setRenderScale(this.value)" />
+
+    <br />
+
+    <label for="drawLevel" title="Determines at which resolution to render the scene">Draw level</label>
+    <input type="number" id="drawLevel" min="1" max="20" value="20" onchange="setDrawLevel(this.value)" />
+    
+    <br />
+
+    <label
+      for="pixelTolerance"
+      title="How deep the graph is traversed relative to the size of a node on screen. By default (1), traversal is stopped when nodes appear smaller than 1 pixel."
+    >
+      Pixel tolerance
+    </label>
+    <input type="number" id="pixelTolerance" min="0" max="10" step="0.1" value="1" onchange="setPixelTolerance(this.value)" />
+    
+    <br />
+    
+    <label for="maxIterations" title="The max. amount of iterations per ray. Rays with too few iterations show up as red pixels">
+      Max iterations</label>
+    <input type="number" id="maxIterations" min="0" max="1000" value="250" step="10" onchange="setMaxIterations(this.value)" />
+
+    <br />
+
+    <label for="uniqueColors" title="Assigns unique colors to each identical node in memory">Unique colors</label>
+    <input type="checkbox" id="uniqueColors" value="false" onchange="setShowUniqueColors(this.checked)" />
+
+    <br /> 
+    
+    <label for="moveSpeed" title="How fast the camera controller moves with the WASD keys">
+      Movement speed
+    </label>
+    <input type="number" id="moveSpeed" value="1" min="0" max="10000" step="10" onchange="setMoveSpeed(this.value)" />
+
+  </div>
+  <script src="js/bundle.js"></script>
+</body>
