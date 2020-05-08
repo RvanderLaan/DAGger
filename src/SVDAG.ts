@@ -1,6 +1,7 @@
 import { vec3, quat, mat4 } from 'gl-matrix';
 
 import Camera from './Camera';
+import { IRendererState } from './main';
 
 function bitCount(num: number) {
   let n = num;
@@ -27,6 +28,8 @@ export class SVDAG extends EncodedOctree {
   initialized: boolean = false;
   // byte offset (not 32 bit ints, but bytes)
   dataLoadedOffset: number = 0;
+
+  renderPreferences: Partial<IRendererState & { spawnPosition: vec3 }> = {};
 
   load(buffer: ArrayBuffer) {
     // Header
@@ -64,39 +67,33 @@ export class SVDAG extends EncodedOctree {
   }
 
   loadChunk(buffer: Uint8Array) {
-    console.log('buf length', buffer.length);
     if (!this.initialized) {
       const lastOffset = this.parseHeader(buffer.buffer);
       this.initialized = true;
 
-      console.log('parsed hdr');
-
-      console.log('nnodes: ', this.nNodes);
-
-      console.log('first offset: ', lastOffset);
-
-      // if ((buffer.length - lastOffset) / 4 !== this.nodes.length) {
+      if ((buffer.length - lastOffset) / 4 !== this.nodes.length) {
         
         // If the first chunk is not the whole scene, set all bytes to full (max 32 bit signed int: TODO: unsigned)
+        // In the renderer, this indicates that these should be counted as intersections immediately
         console.log('pre', this.nodes);
         this.nodes.fill(Math.pow(2, 31) - 1);
-        
         console.log('post', this.nodes);
-      // }
+      }
 
+      // The rest of this chunk is node data, can be loaded as another chunk
       this.loadChunk(buffer.slice(lastOffset));
     } else {
       console.log(`Loading chunk containing ${buffer.length} bytes...`);
+      console.log(this.nodes.length, this.dataLoadedOffset / 4);
       this.nodes.set(new Uint32Array(buffer.buffer), this.dataLoadedOffset / 4);
       this.dataLoadedOffset += buffer.length;
-      
-      // console.log('chunk', this.nodes);
     }
   }
 
   castRay(o: vec3, d: vec3, maxIters = 100): { nodeIndex: number, hitPos: vec3, maxRayLength: number } | null {
-    // const stack: number[] = []; // TODO: list of traversed node indices per level
+    // const stack: number[] = []; // TODO: Reuse list of traversed node indices per level 
     
+    // TODO: Find intersection of ray with next node instead of naively stepping with a small step size
     const stepSize = this.rootSide / Math.pow(2, this.nLevels - 1);
 
     const p = vec3.copy(vec3.create(), o);

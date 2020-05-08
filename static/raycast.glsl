@@ -441,25 +441,26 @@ void main(void) {
       float t = 1. - (result.z / float(maxIters));
       color = vec3(t);
     } else if (viewerRenderMode == 1) { // depth
-      float t = 1. - result.x / length(sceneBBoxMax-sceneBBoxMin);
+      float t = result.x / length(sceneBBoxMax-sceneBBoxMin);
+      // gamma correction
+      t = 1. - pow(t, 1. / 2.2);
       color = vec3(t);
     } else if (viewerRenderMode == 2) { // diffuse lighting
       vec3 lightDir = normalize(lightPos - hitPos);
       float t = 0.5 + 0.5 * max(dot(hitNorm, lightDir), 0.);
       color = vec3(t);
-    } else { // PATH TRACING???!!! :D
+    } else { // TODO: PATH TRACING???!!!
       color = r.d;
     }
 
     if (uniqueColors) {
       vec3 randomColor = normalize(vec3(
-        float(nodeIndex % 100) / 100.,
-        float((3 * nodeIndex) % 200) / 200.,
-        float((2 * nodeIndex) % 300) / 300.
-      ));
+        nodeIndex % 100,
+        (3 * nodeIndex) % 200,
+        (2 * nodeIndex) % 300
+      ) / vec3(100, 200, 300));
       color *= randomColor;
     }
-      
   }
   else if (result.x >= -2. ) { // inside BBox, but no intersection
     float t = result.z / float(maxIters);
@@ -492,7 +493,6 @@ void main(void) {
   }
 
   fragColor = vec4(color, 1);
-
 
   // fragColor = vec4(1.0, 1.0, sin(time) * 0.5f + 0.5f, 1.0);
   // fragColor += vec4(vec3(distance(uv, vec2(0)) * sin(time)), 0.0);

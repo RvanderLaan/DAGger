@@ -45,9 +45,10 @@
   <div id="overlay">
 
     <span><b><a href="https://github.com/RvanderLaan/DAGger" target="_blank">DAGger</a> settings</b></span>
-    <button style="width: 10%; float: right">-</button>
+    <!-- TODO: minimize button -->
+    <!-- <button style="width: 10%; float: right">-</button> -->
     <button style="width: 10%; float: right"
-      onclick="alert('Controls:\n-WASD to move around\n-QE to rotate\n-Drag LMB to rate\n-Drag RMB to zoom')"
+      onclick="alert('Controls:\n-WASD to move around\n-QE to rotate\n-Drag LMB to rotate\n-Scroll to change move speed')"
     >?</button>
 
     <br />
@@ -55,27 +56,10 @@
     <!-- Todo: Tab for File, Renderer, Controller -->
 
     <select style="width: 100%" id="sceneSelector">
-      <option value="examples/sponza_11.svdag">Crytek Sponza [2K] (2MB)</option>
-
-      <option value="examples/EpicCitadel_11.svdag">Epic Citadel [2K] (3MB)</option>
-      <option value="examples/EpicCitadel_12.svdag">Epic Citadel [4K] (8MB)</option>
-      <option value="examples/EpicCitadel_13.svdag">Epic Citadel [8K] (23MB)</option>
-      <option value="examples/EpicCitadel_14.svdag">Epic Citadel [16K] (64MB)</option>
-      <option value="examples/EpicCitadel_16.svdag">Epic Citadel [64K] (444MB)</option>
-      
-      <option value="examples/san-miguel_11.svdag">San Miguel [2K] (5MB)</option>
-      <option value="examples/san-miguel_12.svdag">San Miguel [4K] (18MB)</option>
-      <option value="examples/san-miguel_13.svdag">San Miguel [8K] (56MB)</option>
-      <option value="examples/san-miguel_14.svdag">San Miguel [16K] (161MB)</option>
-
-      <option value="examples/lucy_11-multi.svdag">Lucy (cyclic graph) [2K] (3MB)</option>
-      <option value="examples/lucy_12-multi.svdag">Lucy (cyclic graph) [4K] (10MB)</option>
-      <option value="examples/lucy_12-multi.svdag">Lucy (cyclic graph) [8K] (35MB)</option>
+      <!-- Will be filled dynamically now -->
     </select>
 
     <button id="load" onclick="loadSelectedScene()">Load</button>
-
-    <button id="reset">Reset</button>
 
     <br />
 
@@ -84,7 +68,7 @@
       <option value="0">Iterations</option>
       <option value="1">Depth</option>
       <option value="2">Diffuse lighting</option>
-      <option value="3">Path tracing</option>
+      <option value="3" disabled>Path tracing</option>
     </select>
 
     <br />
@@ -98,6 +82,16 @@
 
     <label for="drawLevel" title="Determines at which resolution to render the scene">Draw level</label>
     <input type="number" id="drawLevel" min="1" max="20" value="20" onchange="setDrawLevel(this.value)" />
+    
+    <br />
+
+    <label
+      for="pixelTolerance"
+      title="How deep the graph is traversed relative to the size of a node on screen. By default (1), traversal is stopped when nodes appear smaller than 1 pixel."
+    >
+      Pixel tolerance
+    </label>
+    <input type="number" id="pixelTolerance" min="0" max="1000" step="0.1" value="1" onchange="setPixelTolerance(this.value)" />
     
     <br />
     

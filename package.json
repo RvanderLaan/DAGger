@@ -10,7 +10,7 @@
     "serve": "python3 ./src/Server.py",
     "build": "webpack --mode=production",
     "predeploy": "yarn run build",
-    "deploy": "gh-pages -d build"
+    "deploy": "gh-pages -d static"
   },
   "author": "",
   "license": "ISC",

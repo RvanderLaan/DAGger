@@ -151,7 +151,8 @@ export class OrbitController {
   }
 
   onMouseWheel(e: WheelEvent) {
-    console.log('wheel', e);
+    // TODO: Need proper 2 way binding from ui and state
+    (window as any).setMoveSpeed(this.moveSpeed *= e.deltaY < 0 ? 1.1 : 0.9);
   }
 }
 
