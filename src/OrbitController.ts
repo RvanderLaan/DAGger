@@ -14,6 +14,9 @@ export class OrbitController {
   prevMousePos: vec2 = vec2.create();
   mousePos: vec2 = vec2.create();
 
+  // cached variable that can be reused in between update calls to store the movement direction into
+  tmpDir: vec3 = vec3.create();
+
   constructor(
     public camera: Camera,
     public moveSpeed: number,
@@ -26,9 +29,6 @@ export class OrbitController {
       vec3.sub(this.tmpDir, this.camera.target, this.camera.position));
   }
 
-  // cached variable that can be reused in between update calls to store the movement direction into
-  tmpDir: vec3 = vec3.create();
-  tmpRotMat = mat4.create();
   update(dt: number) {
     let updated = false;
 
@@ -36,52 +36,54 @@ export class OrbitController {
       dt *= 10;
     }
 
+    const tmpKeyDir = vec3.create();
+
     if (this.keyDownStatus['w']) {
       updated = true;
       vec3.normalize(
-        this.tmpDir, 
-        vec3.sub(this.tmpDir, this.camera.target, this.camera.position));
-      this.moveInDirection(this.tmpDir, this.moveSpeed * dt);
+        tmpKeyDir, 
+        vec3.sub(tmpKeyDir, this.camera.target, this.camera.position));
+      this.moveInDirection(tmpKeyDir, this.moveSpeed * dt);
     } 
     if (this.keyDownStatus['s']) {
       updated = true;
       vec3.normalize(
-        this.tmpDir, 
-        vec3.sub(this.tmpDir, this.camera.target, this.camera.position));
-        this.moveInDirection(this.tmpDir, -this.moveSpeed * dt);
+        tmpKeyDir, 
+        vec3.sub(tmpKeyDir, this.camera.target, this.camera.position));
+        this.moveInDirection(tmpKeyDir, -this.moveSpeed * dt);
     }
     
     if (this.keyDownStatus['a']) {
       updated = true;
-      vec3.cross(this.tmpDir,
+      vec3.cross(tmpKeyDir,
         vec3.normalize(
-          this.tmpDir, 
-          vec3.sub(this.tmpDir, this.camera.position, this.camera.target)),
+          tmpKeyDir, 
+          vec3.sub(tmpKeyDir, this.camera.position, this.camera.target)),
         this.camera.upDir);
-        this.moveInDirection(this.tmpDir, this.moveSpeed * dt);
+        this.moveInDirection(tmpKeyDir, this.moveSpeed * dt);
     }
     if (this.keyDownStatus['d']) {
       updated = true;
-      vec3.cross(this.tmpDir,
+      vec3.cross(tmpKeyDir,
         vec3.normalize(
-          this.tmpDir, 
-          vec3.sub(this.tmpDir, this.camera.position, this.camera.target)),
+          tmpKeyDir, 
+          vec3.sub(tmpKeyDir, this.camera.position, this.camera.target)),
         this.camera.upDir);
-        this.moveInDirection(this.tmpDir, -this.moveSpeed * dt);
+        this.moveInDirection(tmpKeyDir, -this.moveSpeed * dt);
     }
 
     if (this.keyDownStatus['q']) {
       updated = true;
       vec3.normalize(
-        this.tmpDir, 
-        vec3.sub(this.tmpDir, this.camera.target, this.camera.position));
+        tmpKeyDir, 
+        vec3.sub(tmpKeyDir, this.camera.target, this.camera.position));
       this.rotateAlongLocalY(0.5, dt);
     }
     if (this.keyDownStatus['e']) {
       updated = true;
       vec3.normalize(
-        this.tmpDir, 
-        vec3.sub(this.tmpDir, this.camera.target, this.camera.position));
+        tmpKeyDir, 
+        vec3.sub(tmpKeyDir, this.camera.target, this.camera.position));
       this.rotateAlongLocalY(0.5, -dt);
     }
 
@@ -120,8 +122,9 @@ export class OrbitController {
     const localX = vec3.create();
     vec3.cross(localX, this.camera.upDir, forward);
 
-    mat4.rotate(this.tmpRotMat, mat4.identity(this.tmpRotMat), amount * speed, localX);
-    vec3.transformMat4(this.tmpDir, this.tmpDir, this.tmpRotMat);
+    const mat = mat4.create();
+    mat4.rotate(mat, mat4.identity(mat), amount * speed, localX);
+    vec3.transformMat4(this.tmpDir, this.tmpDir, mat);
     vec3.scaleAndAdd(this.camera.target, this.camera.position, this.tmpDir, this.radius);
   }
 

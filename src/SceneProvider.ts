@@ -53,8 +53,10 @@ export default class SceneProvider {
   }
 
   static async fetchPrebuiltScenes() {
-    const hostUrl = 'http://45.77.96.202/dagger/scenes/';
-    const res = await fetch(`${hostUrl}?C=N;O=A`); // sort by name
+    // Needs to be https
+    const hostUrl = `https://allaboutsteinsgate.info/dev/dagger/scenes/`;
+    // sort by name
+    const res = await fetch(`${hostUrl}?C=N;O=A`);
     const pageString = await res.text();
     const doc = new DOMParser().parseFromString(pageString, 'text/html');
 
@@ -63,7 +65,7 @@ export default class SceneProvider {
       // The first three and last row are headers or seperators or a parent link
       .slice(3, -1)
       .map((row: HTMLTableRowElement): SceneFile => ({
-        fileName: (row.childNodes[1] as HTMLTableDataCellElement).innerText,
+        fileName: (row.childNodes[1] as HTMLTableDataCellElement).innerText.trim().replace('.svdag', ''),
         absolutePath: `${hostUrl}${row.querySelector('a').href.split('/').pop()}`,
         size: (row.childNodes[3] as HTMLTableDataCellElement).innerText,
       }));
