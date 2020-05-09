@@ -327,7 +327,6 @@ vec4 trace_ray(in Ray r, in vec2 t_min_max, const in float projection_factor, ou
   ts.t_current = t_min_max.x;
   init(r, ts);
 
-
   float i = 0.;
 
   ivec3 stepDir = ivec3(0);
@@ -337,18 +336,6 @@ vec4 trace_ray(in Ray r, in vec2 t_min_max, const in float projection_factor, ou
   do {
     bool full_voxel = fetch_voxel_bit(ts);
 
-    // If the scene is not loaded yet, there are pointers to MAX_INT. We can fake an intersection then. (TODO: Set node_index to uint)
-    if (ts.node_index == 2147483647) {
-      return vec4(ts.t_current * scale, ts.level, float(iteration_count), ts.node_index);
-    }
-
-    // if (i >= 6.) {
-    // fragColor = vec4(ts.inv_ray_d, 1);
-    // return vec4(0);
-
-    // }
-    // i += 1.;
-    
     if (!full_voxel) {
       stepDir = dda_next(ts);
       if (!in_bounds(ts.local_idx, ts.current_node_size)) {
@@ -366,6 +353,12 @@ vec4 trace_ray(in Ray r, in vec2 t_min_max, const in float projection_factor, ou
         down_in(r, ts);
         fetch_data(ts);
       }
+    }
+
+    // If the scene is not fully loaded yet, there are pointers to MAX_INT. We can fake an intersection then. (TODO: Set node_index to uint)
+    if (ts.node_index == 2147483647) {
+      norm = -vec3(stepDir);
+      return vec4(ts.t_current * scale, ts.level, float(iteration_count), ts.node_index);
     }
       
     ts.child_linear_index = voxel_to_linear_idx(ts.mirror_mask, ts.local_idx, ts.current_node_size);
