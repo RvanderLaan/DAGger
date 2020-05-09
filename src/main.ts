@@ -37,6 +37,8 @@ const defaultState: IRendererState = {
   showUniqueNodeColors: false,
 };
 
+const MAX_DRAW_LEVEL = 20;
+
 const state = { ...defaultState };
 
 let canvas: HTMLCanvasElement;
@@ -65,14 +67,14 @@ function setRenderScale(num: number) {
 (window as any).setRenderScale = setRenderScale.bind(this);
 
 function setDrawLevel(num: number) {
-  state.drawLevel = num; // Math.max(1, Math.min(num, scene.nLevels));
+  state.drawLevel = Math.max(1, Math.min(num, MAX_DRAW_LEVEL));
   (document.getElementById('drawLevel') as HTMLInputElement).value = `${state.drawLevel}`;
 }
 (window as any).setDrawLevel = setDrawLevel.bind(this);
 
 function setRenderMode(num: RenderMode) {
   console.log('setting render mode', num)
-  state.renderMode = num; // Math.max(1, Math.min(num, scene.nLevels));
+  state.renderMode = num;
   (document.getElementById('renderMode') as HTMLInputElement).value = `${state.renderMode}`;
 }
 (window as any).setRenderMode = setRenderMode.bind(this);
@@ -108,7 +110,9 @@ async function loadSelectedScene() {
   const selectedSceneIndex = parseInt(selector.options[selector.selectedIndex].value);
 
   // TODO: Dispose current scene first
-  gl.deleteTexture(texture);
+  if (texture !== undefined) {
+    gl.deleteTexture(texture);
+  }
 
   // TODO: In theory, you could only host the highest res, and just do a partial load 
 
@@ -118,7 +122,7 @@ async function loadSelectedScene() {
   // gl.deleteShader(fragShader);
   // fragShader
 
-  const oldBboxCenter = scene.bboxCenter;
+  const oldBboxCenter = scene?.bboxCenter || vec3.create();
 
   texture = await createTexture(gl);
   scene = await loadScene(sceneList[selectedSceneIndex]);
@@ -135,7 +139,9 @@ async function loadSelectedScene() {
   }
   camera.updateMatrices();
 
-  setInitialUniforms();
+  if (program !== undefined) {
+    setInitialUniforms();
+  }
 }
 (window as any).loadSelectedScene = loadSelectedScene.bind(this);
 
@@ -162,31 +168,43 @@ async function init() {
   gl.clear(gl.COLOR_BUFFER_BIT);
 
   // Load available scenes
-  sceneList.push(...(await SceneProvider.getSceneList()));
+  sceneList.push(...(await SceneProvider.getGeneratedSceneList()));
   const sceneSelector: HTMLSelectElement = document.querySelector('#sceneSelector');
-  sceneList.forEach((item, index) => {
+  const addSceneToUI = (item: SceneOption, index: number) => {
     const opt = document.createElement('option');
     opt.value = `${index}`;
     opt.innerText = item.label;
     sceneSelector.appendChild(opt);
+  }
+  sceneList.forEach(addSceneToUI);
+
+  // Fetch pre-built scenes async so we don't have to wait for the request
+  SceneProvider.getPrebuiltSceneList().then(scenes => {
+    sceneList.push(...scenes);
+    sceneSelector.innerHTML = '';
+    sceneList.forEach(addSceneToUI);
   });
-
-  texture = await createTexture(gl);
-  scene = await loadScene(sceneList[0]);
-  camera.updateMatrices();
-
-  setDrawLevel(scene.nLevels);
-
-  [program, fragShader] = await loadProgram(gl, scene.nLevels);
-
-  gl.enable(gl.DEPTH_TEST);
-
-  camera.target.set(scene.bboxCenter);
-  camera.updateMatrices();
-
-  setInitialUniforms();
-
+  
   controller = new OrbitController(camera, 1);
+
+  await loadSelectedScene();
+  controller.init();
+
+  // Load the program & shaders
+  [program, fragShader] = await loadProgram(gl, scene.nLevels);
+  setInitialUniforms();
+  
+  
+  // We don't have any vertex attrs, but webgl complains if we don't enable at least one
+  // const buf = gl.createBuffer();
+  // gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+  // gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([0]), gl.STATIC_DRAW);
+  // gl.vertexAttribPointer(0, 1, gl.FLOAT, false, 0, 0);
+  // gl.enableVertexAttribArray(0);
+  // gl.bindAttribLocation()
+  
+  gl.enable(gl.DEPTH_TEST);
+  
 
   canvas.tabIndex = 0;
   canvas.addEventListener('keydown', controller.onKeyDown.bind(controller));
@@ -294,20 +312,22 @@ export async function loadScene(sceneOption: SceneOption) {
 
   if (sceneOption.loadType === 'stream') {
     // Option 1: Progressively upload to GPU as every chunk of the file is fetched 
+    // TODO: Web worker
     svdag = await loadSceneStream(sceneOption.downloadPath);
   } else if (sceneOption.loadType === 'fetch') { 
     // Option 2: Wait until file is completely fetched before uploading to GPU memory
     svdag = new SVDAG();
     const response = await fetch(sceneOption.downloadPath);
     svdag.load(await response.arrayBuffer());
-    svdag.dataLoadedOffset = svdag.nNodes;
+    svdag.dataLoadedOffset = svdag.nNodes * 4;
     uploadTexData(svdag, svdag.nNodes);
     svdag.renderPreferences.maxIterations = defaultState.maxIterations;
   } else if (sceneOption.loadType === 'preloaded') {
     // Option 3: Preloaded data (currently used for generated SVDAGs)
     svdag = new SVDAG();
     sceneOption.getScene(svdag);
-    svdag.dataLoadedOffset = svdag.nNodes;
+    svdag.originalNodeLength = svdag.nodes.length;
+    svdag.dataLoadedOffset = svdag.nNodes * 4;
     svdag.initialized = true; // header should already be loaded for preloaded scenes
     uploadTexData(svdag, svdag.nNodes);
     svdag.renderPreferences.maxIterations = defaultState.maxIterations;
@@ -331,16 +351,20 @@ async function loadSceneStream(downloadPath: string) {
   const reader = response.body.getReader();
 
   // Load header before continuing
-  const { value } = await reader.read();
+  const { done, value } = await reader.read();
 
   const svdag = new SVDAG();
   svdag.loadChunk(value);
 
-  // Upload first chunk of data
-  uploadTexData(svdag, svdag.dataLoadedOffset);
+  // Upload all data the first time (filled with max_int -1)
+  uploadTexData(svdag, svdag.dataLoadedOffset / 4);
 
+  let progressPct = Math.round((svdag.dataLoadedOffset / 4) / svdag.originalNodeLength * 100);
+  const loadButton = document.getElementById('load') as HTMLButtonElement;
+  loadButton.disabled = true;
+  loadButton.innerText = `Load (${progressPct}%)`;
   
-  const loadNodesPromise = new Promise(async () => {
+  const loadNodesPromise = async () => {
     // Keep track of when the last data upload to GPU was done, to throttle it a bit
     let lastUpload = new Date();
     let lastUploadIndex = svdag.dataLoadedOffset;
@@ -354,24 +378,37 @@ async function loadSceneStream(downloadPath: string) {
 
       // Load in SVDAG in RAM
       svdag.loadChunk(value);
+
+      progressPct = Math.round((svdag.dataLoadedOffset / 4) / svdag.originalNodeLength * 100);
+      loadButton.innerText = `Load (${progressPct}%)`;
   
-      // Upload to GPU every second
+      // Upload to GPU x milliseconds
+      // TODO: Improve streaming performance we can upload every time
       const d = new Date();
       if (d.getTime() - lastUpload.getTime() > 1000) {
-        uploadTexData(svdag, svdag.dataLoadedOffset - lastUploadIndex);
+        uploadTexData(svdag, (svdag.dataLoadedOffset - lastUploadIndex) / 4);
+        lastUploadIndex = svdag.dataLoadedOffset;
         lastUpload = d;
       }
     }
 
     // Final upload
-    uploadTexData(svdag, svdag.dataLoadedOffset - lastUploadIndex);
-
+    uploadTexData(svdag, (svdag.dataLoadedOffset - lastUploadIndex) / 4);
+    // uploadTexData(svdag, svdag.dataLoadedOffset);
     return;
-  });
+  };
 
-  loadNodesPromise.then(() => {
+  const finish = () => {
     console.log('Finished loading!');
-  });
+    loadButton.innerText = 'Load';
+    loadButton.disabled = false;
+  }
+
+  if (done || progressPct >= 99) {
+    finish();
+  } else {
+    loadNodesPromise().then(finish);
+  }
   return svdag;
 }
 
@@ -432,13 +469,17 @@ async function createTexture(gl: WebGL2RenderingContext) {
   return texture;
 }
 
+/**
+ * Updates the 3D texture with only the nodes that have been loaded since the last texture update
+ */
 async function uploadTexData(svdag: SVDAG, nNewNodes: number) {
   const maxT3DTexelsPow2 = maxT3DTexels * maxT3DTexels;
   const neededTexels = svdag.nodes.length;
   const depthLayers = Math.ceil(neededTexels / maxT3DTexelsPow2);
   const nTexelsToAllocate = maxT3DTexelsPow2 * depthLayers;
 
-  const chunkStart = svdag.dataLoadedOffset - nNewNodes;
+  const chunkStart = svdag.dataLoadedOffset / 4 - nNewNodes;
+  console.log(chunkStart, svdag.dataLoadedOffset / 4, nNewNodes);
 
   if (chunkStart === 0) {
     // For the first chunk, define the texture type and upload what data we have 
@@ -452,32 +493,34 @@ async function uploadTexData(svdag: SVDAG, nNewNodes: number) {
       svdag.nodes = paddedNodes;
     }
     
+    // Every "pixel" in the 3D texture will be used as a 32 bit int, so we set the type to a single 32 bit red pixel (R32UI)
     gl.texStorage3D(gl.TEXTURE_3D, 1, gl.R32UI, maxT3DTexels, maxT3DTexels, depthLayers);
+    // For the initial load, we'll load all of the data
     gl.texSubImage3D(gl.TEXTURE_3D, 0, 0, 0, 0, maxT3DTexels, maxT3DTexels, depthLayers, gl.RED_INTEGER, gl.UNSIGNED_INT, svdag.nodes);
    
     // gl.texImage3D(gl.TEXTURE_3D, 0, gl.R32UI, maxT3DTexels, maxT3DTexels, depthLayers, 0, gl.RED_INTEGER, gl.UNSIGNED_INT, svdag.nodes);
   } else {
     // For following chunks of data, upload one or more Z slices of the 3D texture
+    // TODO: Also take into account the yOffset - may need two texSubImage3D calls
     const xOffset = 0;
     const yOffset = 0; // Math.floor(chunkStart / maxT3DTexels) % maxT3DTexels;
     const zOffset = Math.floor(chunkStart / maxT3DTexelsPow2);
 
-    const chunkStartZ = Math.floor(chunkStart / maxT3DTexelsPow2);
-    const chunkEndZ = Math.floor(svdag.dataLoadedOffset / maxT3DTexelsPow2);
+    const chunkStartZ = zOffset;
+    const chunkEndZ = Math.floor((svdag.dataLoadedOffset / 4) / maxT3DTexelsPow2);
 
     const updateWidth = maxT3DTexels;
     const updateHeight = maxT3DTexels; // Math.ceil(svdag.dataLoadedOffset / maxT3DTexels) % maxT3DTexels - yOffset;
-    const updateDepth = (chunkEndZ - chunkStartZ);
-    
+    const updateDepth = (chunkEndZ - chunkStartZ) + 1;
+
     const newNodes = svdag.nodes.slice(
-      yOffset * maxT3DTexels + zOffset * maxT3DTexelsPow2,
-      maxT3DTexels + updateHeight * maxT3DTexels + zOffset * maxT3DTexelsPow2,
+      yOffset * maxT3DTexels + chunkStartZ * maxT3DTexelsPow2,
+      maxT3DTexels + updateHeight * maxT3DTexels + chunkEndZ * maxT3DTexelsPow2,
     );
   
-    console.log(`Update uploading to 3D texture (${svdag.dataLoadedOffset}/${svdag.nodes.length} [${Math.round(svdag.dataLoadedOffset / svdag.nodes.length * 100) }%])...`);
-    console.log('Offset: ', xOffset, yOffset, zOffset);
-
-    gl.texStorage3D(gl.TEXTURE_3D, 1, gl.R32UI, maxT3DTexels, maxT3DTexels, depthLayers);
+    const progressPct = Math.round((svdag.dataLoadedOffset / 4) / svdag.originalNodeLength * 100);
+    console.log(`Uploading data to 3D texture (${svdag.dataLoadedOffset / 4}/${svdag.originalNodeLength} [${progressPct}%])...`);
+    console.log('#layers', depthLayers, 'start', zOffset, 'chunkStart', chunkStart, 'newNodes', nNewNodes, 'end', chunkEndZ, 'depth', updateDepth)
     gl.texSubImage3D(gl.TEXTURE_3D, 0, xOffset, yOffset, zOffset, updateWidth, updateHeight, updateDepth, gl.RED_INTEGER, gl.UNSIGNED_INT, newNodes);
     
     // gl.texSubImage3D(gl.TEXTURE_3D, 0, 0, 0, 0, maxT3DTexels, maxT3DTexels, depthLayers, gl.RED_INTEGER, gl.UNSIGNED_INT, svdag.nodes);

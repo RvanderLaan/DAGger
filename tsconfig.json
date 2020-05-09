@@ -1,7 +1,7 @@
 {
   "compilerOptions": {
-    "target": "es6",
-    "lib": ["es2018", "dom", "esnext.bigint"],
+    "target": "ES2019",
+    "lib": ["ES2019", "dom", "esnext.bigint"],
     "noImplicitAny": true,
     "removeComments": true,
     "baseUrl": "./js",

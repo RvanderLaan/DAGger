@@ -21,8 +21,16 @@ export class OrbitController {
     public camera: Camera,
     public moveSpeed: number,
   ) {
-    this.radius = vec3.dist(this.camera.position, this.camera.target);
     this.keyDownStatus = {};
+    this.radius = vec3.dist(this.camera.position, this.camera.target);
+
+    vec3.normalize(
+      this.tmpDir, 
+      vec3.sub(this.tmpDir, this.camera.target, this.camera.position));
+  }
+
+  init() {
+    this.radius = vec3.dist(this.camera.position, this.camera.target);
 
     vec3.normalize(
       this.tmpDir, 
@@ -37,6 +45,7 @@ export class OrbitController {
     }
 
     const tmpKeyDir = vec3.create();
+    // tmpKeyDir.set(this.tmpDir);
 
     if (this.keyDownStatus['w']) {
       updated = true;

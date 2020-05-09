@@ -24,6 +24,8 @@ export abstract class EncodedOctree {
 
 export class SVDAG extends EncodedOctree {
   nodes: Uint32Array;
+  // Since the `nodes` array might get padded, store the original amount of data in here
+  originalNodeLength: number;
 
   initialized: boolean = false;
   // byte offset (not 32 bit ints, but bytes)
@@ -55,6 +57,7 @@ export class SVDAG extends EncodedOctree {
     const firstLeafPointer = new Uint32Array(buffer.slice(i, i + 4))[0];
     i += 4;
     const nodeBufLength = new Uint32Array(buffer.slice(i, i + 4))[0];
+    this.originalNodeLength = nodeBufLength;
     i += 4;
 
     this.nodes = new Uint32Array(nodeBufLength);
@@ -72,19 +75,15 @@ export class SVDAG extends EncodedOctree {
       this.initialized = true;
 
       if ((buffer.length - lastOffset) / 4 !== this.nodes.length) {
-        
         // If the first chunk is not the whole scene, set all bytes to full (max 32 bit signed int: TODO: unsigned)
         // In the renderer, this indicates that these should be counted as intersections immediately
-        console.log('pre', this.nodes);
         this.nodes.fill(Math.pow(2, 31) - 1);
-        console.log('post', this.nodes);
       }
 
       // The rest of this chunk is node data, can be loaded as another chunk
       this.loadChunk(buffer.slice(lastOffset));
     } else {
-      console.log(`Loading chunk containing ${buffer.length} bytes...`);
-      console.log(this.nodes.length, this.dataLoadedOffset / 4);
+      // console.log(`Loading chunk containing ${buffer.length} bytes...`);
       this.nodes.set(new Uint32Array(buffer.buffer), this.dataLoadedOffset / 4);
       this.dataLoadedOffset += buffer.length;
     }

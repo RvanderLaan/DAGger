@@ -23,7 +23,7 @@ type SceneFile = {
 }
 
 export default class SceneProvider {
-  static async getSceneList(): Promise<SceneOption[]> {
+  static async getGeneratedSceneList() {
     const generatedSceneOptions: SceneOption[] = [
       {
         label: 'Cube fractal',
@@ -36,19 +36,19 @@ export default class SceneProvider {
         loadType: 'preloaded',
       }, 
     ];
+    return generatedSceneOptions;
+  }
+  static async getPrebuiltSceneList(): Promise<SceneOption[]> {
     try {
       const prebuiltScenes = await SceneProvider.fetchPrebuiltScenes();
-      return [
-        ...generatedSceneOptions,
-        ...prebuiltScenes.map<SceneOption>(f => ({
-          label: `${f.fileName} (${f.size})`,
-          downloadPath: f.absolutePath,
-          loadType: 'fetch', // todo: if size is small, maybe use fetch loadType
-        })),
-      ] as SceneOption[];
+      return prebuiltScenes.map<SceneOption>(f => ({
+        label: `${f.fileName} (${f.size})`,
+        downloadPath: f.absolutePath,
+        loadType: 'stream', // todo: if size is small, maybe use fetch loadType
+      }));
     } catch (e) {
       console.error('Could not fetch prebuilt scenes :(', e);
-      return generatedSceneOptions;
+      return [];
     }
   }
 

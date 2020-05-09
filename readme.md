@@ -15,3 +15,8 @@ Goals:
  - [ ] Import 3D models (voxelize on the fly)
  - [ ] Scene modification
  
+Running it locally:
+- Get NPM and Yarn installed
+- Install deps with `yarn install`
+- Run `yarn watch` to watch for file changes (will keep running), a new JS bundle will be generated each time you save a file into the `/static` folder
+- Start a web server on the `/static` folder, if you have python you can do `yarn serve` in a new terminal
