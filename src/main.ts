@@ -138,6 +138,7 @@ async function loadSelectedScene() {
     setMoveSpeed(vec3.distance(scene.bboxStart, scene.bboxEnd) * 0.01);
   }
   camera.updateMatrices();
+  controller.init();
 
   if (program !== undefined) {
     setInitialUniforms();
