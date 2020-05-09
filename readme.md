@@ -1,10 +1,17 @@
-# DAGger: Sparse Voxel DAG Raycasting on the Web
+# DAGger: Sparse Voxel DAG Rendering on the Web
 
-[Live Demo](http://45.77.96.202/dagger/)
+[Try it out!](https://rvanderlaan.github.io/DAGger/)
 
-Web version of the viewer application from the [SymVox](https://github.com/RvanderLaan/SymVox) repository.
+This is a web version of the viewer application from the [SVDAG-Compression](https://github.com/RvanderLaan/SVDAG-Compression) repository.
 
-Goal: Render Sparse Voxel DAG in the browser using WebGL.
-Due to limitations of WebGL, some things need to be rewritten.
-- No support for SamplerBuffer, replaced with Texture3D 
-
+Goals:
+ - [x] Render Sparse Voxel DAG in the browser using WebGL.
+       Changes from OpenGL implementation: Currently very simplified. Replaced SamplerBuffer with Texture3D for represesenting nodes (no support in WebGL). No shadows or beam optimization yet.
+ - [x] First person controller [wip]
+ - [x] Stream the data to the GPU while downloading [wip]
+ - [ ] CPU raycasting for collision detection (gravity) and scene interaction cursor rays [wip]
+ - [ ] Fractal generator [wip]
+ - [ ] Attribute encoding (colors)
+ - [ ] Import 3D models (voxelize on the fly)
+ - [ ] Scene modification
+ 
