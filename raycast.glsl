@@ -431,6 +431,17 @@ void main(void) {
   if (result.x >= 0.) // Intersection!!!
   {
     if (viewerRenderMode == 0) { // ITERATIONS
+      // combine em all
+      // float its = 1. - (result.z / float(maxIters));
+
+      // float depth = result.x / length(sceneBBoxMax-sceneBBoxMin);
+      // depth = 1. - pow(depth, 1. / 2.2); // gamma correction
+
+      // vec3 lightDir = normalize(lightPos - hitPos);
+      // float diff = 0.5 + 0.5 * max(dot(hitNorm, lightDir), 0.);
+
+      // color = vec3(its * (0.5 + 0.5 * depth) * diff);
+
       float t = 1. - (result.z / float(maxIters));
       color = vec3(t);
     } else if (viewerRenderMode == 1) { // depth
