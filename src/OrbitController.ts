@@ -10,6 +10,7 @@ export class OrbitController {
   radius: number;
 
   keyDownStatus: IKeyDownStatus;
+  numTouches: number; // amount of touches for touchscreens
 
   prevMousePos: vec2 = vec2.create();
   mousePos: vec2 = vec2.create();
@@ -47,7 +48,7 @@ export class OrbitController {
     const tmpKeyDir = vec3.create();
     // tmpKeyDir.set(this.tmpDir);
 
-    if (this.keyDownStatus['w']) {
+    if (this.keyDownStatus['w'] || this.numTouches === 2) { // move forward with 2 fingers
       updated = true;
       vec3.normalize(
         tmpKeyDir, 
@@ -152,14 +153,29 @@ export class OrbitController {
   onMouseDown(e: MouseEvent) {
     this.keyDownStatus[`mouse-${e.button}`] = true;
     this.prevMousePos.set([e.clientX, e.clientY]);
+    this.mousePos.set(this.prevMousePos);
+  }
+  onTouchStart(e: TouchEvent) {
+    this.keyDownStatus[`mouse-0`] = true;
+    this.prevMousePos.set([e.touches[0].clientX, e.touches[0].clientY]);
+    this.mousePos.set(this.prevMousePos);
+    this.numTouches = e.touches.length;
   }
   
   onMouseUp(e: MouseEvent) {
     this.keyDownStatus[`mouse-${e.button}`] = false;
   }
+  onTouchEnd(e: TouchEvent) {
+    this.keyDownStatus[`mouse-0`] = false;
+    this.numTouches = 0;
+  }
 
   onMouseMove(e: MouseEvent) {
     this.mousePos.set(vec2.fromValues(e.clientX, e.clientY));
+  }
+  onTouchMove(e: TouchEvent) {
+    this.mousePos.set(vec2.fromValues(e.touches[0].clientX, e.touches[0].clientY));
+    this.numTouches = e.touches.length;
   }
 
   onMouseWheel(e: WheelEvent) {

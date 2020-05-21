@@ -6,7 +6,7 @@
   "main": "./src/main.ts",
   "scripts": {
     "compile": "tsc",
-    "watch": "webpack -w --mode=development",
+    "watch": "webpack -w --mode=development --devtool=inline-source-map",
     "serve": "python3 ./src/Server.py",
     "build": "webpack --mode=production",
     "predeploy": "yarn run build",

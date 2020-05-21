@@ -214,8 +214,12 @@ async function init() {
   canvas.addEventListener('mouseup', controller.onMouseUp.bind(controller));
   canvas.addEventListener('mousemove', controller.onMouseMove.bind(controller));
   canvas.addEventListener('wheel', controller.onMouseWheel.bind(controller));
-  // canvas.addEventListener('contextmenu', () => false);
   canvas.oncontextmenu = () => false;
+
+  // Mobile
+  canvas.addEventListener('touchstart', controller.onTouchStart.bind(controller));
+  canvas.addEventListener('touchend', controller.onTouchEnd.bind(controller));
+  canvas.addEventListener('touchmove', controller.onTouchMove.bind(controller));
 
   // "main" key event listener
   canvas.addEventListener('keydown', (e) => {
@@ -227,7 +231,15 @@ async function init() {
   });
 
   // Automatically lower the render scale to half res when fps is low after 1.5 sec
-  setTimeout(() => (latestFps < 40) && setRenderScale(0.5), 2500);
+  setTimeout(() => {
+    if (latestFps < 15) {
+      setRenderScale(0.25);
+    } else if (latestFps < 30) {
+      setRenderScale(0.5);
+    } else if (latestFps < 45) {
+      setRenderScale(0.75);
+    }
+  }, 2500);
 
   // Start render loop
   // TODO: Only rerender when input changes
