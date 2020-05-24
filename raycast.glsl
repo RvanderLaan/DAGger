@@ -1,8 +1,9 @@
-//
-// First few lines are intentionally left empty
-// They will be replaced with more #defines during compilation
-// So that the shader compilation errors point to correct lines
-//
+// First few lines will be replaced with #defines
+#define INNER_LEVELS 0u
+#define TEX3D_SIZE 0
+#define TEX3D_SIZE_POW2 0
+#define VIEWER_MODE 1
+#define DEPTH_MODE 1
 
 #define MAX_STACK_DEPTH (INNER_LEVELS+1u)
 
@@ -33,6 +34,9 @@ uniform bool uniqueColors;
 uniform vec3 lightPos;
 uniform bool enableShadows;
 uniform float normalEpsilon;
+
+uniform sampler2D minDepthTex;
+uniform bool useBeamOptimization;
 
 // uniform uint levelOffsets[INNER_LEVELS];
 
@@ -391,10 +395,29 @@ Ray computeCameraRay(in vec2 pixelScreenCoords) {
   return r;
 }
 
+float getMinT(in int delta) {
+	ivec2 p = ivec2((ivec2(gl_FragCoord.xy) - delta / 2) / delta);
 
+	float tl = texelFetch(minDepthTex, ivec2(p.x, p.y), 0).x;
+	float tr = texelFetch(minDepthTex, ivec2(p.x+1, p.y), 0).x;
+	float bl = texelFetch(minDepthTex, ivec2(p.x, p.y+1), 0).x;
+	float br = texelFetch(minDepthTex, ivec2(p.x+1, p.y+1), 0).x;
+
+	return min(min(tl, tr), min(bl, br));
+}
+
+#if VIEWER_MODE
 void main(void) {
   // vec2 uv = (gl_FragCoord.xy - resolution * 0.5) / resolution.y;
   vec2 screenCoords = (gl_FragCoord.xy / resolution) * 2.0 - 1.0;
+
+#if 0 // DEBUG for seeing the low-res first-depth pre-pass
+	if (useBeamOptimization) {
+		//color = texture(minDepthTex, (gl_FragCoord.xy/screenRes) ).xxx/10000.0f;
+		fragColor = vec4(vec3(getMinT(8) / length(sceneBBoxMax - sceneBBoxMin)), 1);
+		return;
+	}
+#endif
   
   // Unit direction ray.
   // vec3 rd = normalize(vec3(screenCoords, 1.));
@@ -415,10 +438,12 @@ void main(void) {
 
   Ray r = computeCameraRay(screenCoords);
   float epsilon = 1E-3f;
-  vec2 t_min_max = vec2(0, 1e30);
+  vec2 t_min_max = vec2(useBeamOptimization ? 0.95 * getMinT(8) : 0., 1e30f);
 
   vec3 hitNorm;
-  vec4 result = trace_ray(r, t_min_max, projectionFactor, hitNorm);
+  vec4 result = t_min_max.x > 1e25
+    ? vec4(-4)
+    : trace_ray(r, t_min_max, projectionFactor, hitNorm);
 
   // Hit position = camera origin + depth * ray direction
   vec3 hitPos = r.o + result.x * r.d;
@@ -501,3 +526,21 @@ void main(void) {
   // fragColor = vec4(1.0, 1.0, sin(time) * 0.5f + 0.5f, 1.0);
   // fragColor += vec4(vec3(distance(uv, vec2(0)) * sin(time)), 0.0);
 }
+
+#elif DEPTH_MODE
+
+void main() {
+  vec2 screenCoords = (gl_FragCoord.xy / resolution) * 2.0 - 1.0;
+	Ray r = computeCameraRay(screenCoords);	
+	vec2 t_min_max = vec2(useBeamOptimization ? getMinT(8) : 0., 1e30f);
+
+	vec3 hitNorm;
+
+	vec4 result = trace_ray(r, t_min_max, projectionFactor, hitNorm);
+	if (result.x > 0.) // Intersection!!!
+		fragColor = result;
+	else
+		fragColor = vec4(1e30f); // no intersection - depth is infinite
+}
+
+#endif
