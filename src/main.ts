@@ -66,9 +66,13 @@ win.setPixelTolerance = setPixelTolerance.bind(this);
 
 function setShowUniqueColors(val: boolean) {
   renderer.state.showUniqueNodeColors = val;
-  console.log(val)
 }
 win.setShowUniqueColors = setShowUniqueColors.bind(this);
+
+function setUseBeamOptimization(val: boolean) {
+  renderer.state.useBeamOptimization = val;
+}
+win.setUseBeamOptimization = setUseBeamOptimization.bind(this);
 
 // SCENE LOADING
 /////////////////
@@ -275,14 +279,13 @@ async function init() {
   }
 
   console.log(gl.getParameter(gl.VERSION), gl.getParameter(gl.SHADING_LANGUAGE_VERSION), gl.getParameter(gl.VENDOR));
-  // console.log('Supported extensions:', gl.getSupportedExtensions());
+  console.log('Supported extensions:', gl.getSupportedExtensions());
 
   const maxT3DTexels = gl.getParameter(gl.MAX_3D_TEXTURE_SIZE);
 
   const maxNodes = Math.floor(Math.pow(maxT3DTexels, 3) / 5); // average of 4 pointers per node + 1 header texel (32 bit texels)
   console.log(`Max 3D tex = ${maxT3DTexels}. Max avg. nodes ~= ${maxNodes} = ${Math.round(maxNodes / 1e6)} MNodes`);
 
-  gl.clearColor(0.0, 0.0, 0.0, 1.0);
   gl.clear(gl.COLOR_BUFFER_BIT);
 
   // Load available scenes
@@ -311,7 +314,7 @@ async function init() {
   // Load the program & shaders
   await renderer.initShaders();
   renderer.initUniforms();
-  renderer.setInitialUniforms();
+  renderer.setInitialUniforms(renderer.viewerUniformDict);
   
   // We don't have any vertex attrs, but webgl complains if we don't enable at least one
   // const buf = gl.createBuffer();
@@ -321,9 +324,8 @@ async function init() {
   // gl.enableVertexAttribArray(0);
   // gl.bindAttribLocation()
   
-  gl.enable(gl.DEPTH_TEST);
+  gl.disable(gl.DEPTH_TEST);
   
-
   canvas.tabIndex = 0;
   canvas.addEventListener('keydown', controller.onKeyDown.bind(controller));
   canvas.addEventListener('keyup', controller.onKeyUp.bind(controller));

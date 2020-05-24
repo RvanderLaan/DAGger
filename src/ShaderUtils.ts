@@ -1,3 +1,5 @@
+import { RenderMode } from "./Renderer";
+
 function loadVertShader(gl: WebGL2RenderingContext) {
   // // https://www.saschawillems.de/blog/2016/08/13/vulkan-tutorial-on-rendering-a-fullscreen-quad-without-buffers/
   const vertSrc = `#version 300 es
@@ -16,7 +18,7 @@ function loadVertShader(gl: WebGL2RenderingContext) {
   return vertShader;
 }
 
-async function loadFragShader(gl: WebGL2RenderingContext, nLevels: number) {
+async function loadFragShader(gl: WebGL2RenderingContext, nLevels: number, mode: 'viewer' | 'depth' | 'pathtracing') {
   const maxT3DTexels = gl.getParameter(gl.MAX_3D_TEXTURE_SIZE);
   const maxT3DTexelsPow2 = maxT3DTexels * maxT3DTexels;
 
@@ -28,6 +30,8 @@ async function loadFragShader(gl: WebGL2RenderingContext, nLevels: number) {
 #define INNER_LEVELS ${nLevels *2 - 1}u
 #define TEX3D_SIZE ${maxT3DTexels}
 #define TEX3D_SIZE_POW2 ${maxT3DTexelsPow2}
+#define VIEWER_MODE ${mode === 'viewer' ? 1 : 0}
+#define DEPTH_MODE ${mode === 'depth' ? 1 : 0}
 `;
 
   // Replace the first few lines from shaderSrc with defines
@@ -36,14 +40,14 @@ async function loadFragShader(gl: WebGL2RenderingContext, nLevels: number) {
   const shader = gl.createShader(gl.FRAGMENT_SHADER);
   gl.shaderSource(shader, shaderSrc);
   gl.compileShader(shader);
-  console.log('Raycast shader: ', gl.getShaderInfoLog(shader) || 'OK');
+  console.log(`Raycast shader (${mode}): `, gl.getShaderInfoLog(shader) || 'OK');
   return shader;
 }
 
-export async function loadProgram(gl: WebGL2RenderingContext, nLevels: number) {
+export async function loadProgram(gl: WebGL2RenderingContext, nLevels: number, mode: 'viewer' | 'depth' | 'pathtracing') {
   // Setup shaders
   const vertShader = loadVertShader(gl);
-  const fragShader = await loadFragShader(gl, nLevels);
+  const fragShader = await loadFragShader(gl, nLevels, mode);
 
   // Proper error is printed when we don't check for errors
   // if (!gl.getShaderParameter(fragShader, gl.COMPILE_STATUS)

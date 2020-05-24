@@ -12,6 +12,7 @@ const UNIFORMS = [
   'viewerRenderMode',
   'selectedVoxelIndex', 'uniqueColors',
   'lightPos', 'enableShadows', 'normalEpsilon',
+  'minDepthTex', 'useBeamOptimization',
 ] as const;
 type Uniform = typeof UNIFORMS[number];
 
@@ -36,23 +37,28 @@ export interface IRendererState {
   renderScale: number;
   drawLevel: number;
   maxIterations: number;
-  useMinDepthOptimization: boolean;
+  useBeamOptimization: boolean;
   showUniqueNodeColors: boolean;
 }
 
 export default class Renderer {
   gl: WebGL2RenderingContext;
-  uniformDict: UniformDict;
+  viewerUniformDict: UniformDict;
+  depthUniformDict: UniformDict;
+
   svdag: SVDAG;
 
-  program: WebGLProgram;
-  fragShader: WebGLShader;
+  viewerProgram: WebGLProgram;
+  viewerFragShader: WebGLShader;
+  depthProgram: WebGLProgram;
   texture: WebGLTexture;
   // controller: OrbitController;
 
   maxT3DTexels: number;
 
-  minDepthTexId?: number;
+  minDepthFBO: WebGLFramebuffer;
+  minDepthTex: WebGLTexture;
+
   fullDepthTexId?: number;
 
   state: IRendererState = {
@@ -64,7 +70,7 @@ export default class Renderer {
     drawLevel: 1,
     maxIterations: 250,
     renderMode: RenderMode.ITERATIONS,
-    useMinDepthOptimization: true,
+    useBeamOptimization: true,
     showUniqueNodeColors: false,
   };
 
@@ -77,17 +83,47 @@ export default class Renderer {
   }
 
   public render() {
-    const { gl, canvas, state } = this;
+    const { gl, canvas, state, viewerUniformDict, depthUniformDict } = this;
 
+    // Pre-render low res depth pass
+    if (this.state.useBeamOptimization) {
+      gl.useProgram(this.depthProgram);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, this.minDepthFBO);
+      // gl.bindTexture(gl.TEXTURE_3D, this.texture);
+      gl.activeTexture(gl.TEXTURE1);
+      
+      this.setInitialUniforms(depthUniformDict);
+
+      const width = Math.ceil(canvas.width / 8);
+      const height = Math.ceil(canvas.height / 8);
+      
+      gl.viewport(0, 0, width, height);
+      gl.uniform2f(depthUniformDict.resolution, width, height);
+      gl.uniform1i(depthUniformDict.useBeamOptimization, 0);
+      gl.uniform1f(depthUniformDict.projectionFactor, this.getProjectionFactor(1, 8));
+
+      gl.clearColor(0, 0, 0, 0);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+      // Restore normal viewer program
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      gl.useProgram(this.viewerProgram);
+      gl.bindTexture(gl.TEXTURE_2D, this.minDepthTex);
+    }
+    
     // TODO: Only update uniforms when they change, not all of them every time
-    this.setInitialUniforms();
+    this.setInitialUniforms(viewerUniformDict);
 
     // Render 
+    gl.clearColor(0, 0, 0, 1);
     gl.clear(gl.COLOR_BUFFER_BIT);
     gl.viewport(0, 0, canvas.width, canvas.height);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
 
     state.frame++;
+
+    gl.bindTexture(gl.TEXTURE_2D, null);
   }
 
   initScene(svdag: SVDAG) {
@@ -95,8 +131,44 @@ export default class Renderer {
   }
 
   async initShaders() {
-    const { gl, svdag } = this;
-    [this.program, this.fragShader] = await loadProgram(gl, svdag.nLevels);
+    const { gl, svdag, canvas } = this;
+    [this.viewerProgram, this.viewerFragShader] = await loadProgram(gl, svdag.nLevels, 'viewer');
+    [this.depthProgram] = await loadProgram(gl, svdag.nLevels, 'depth');
+    
+    gl.useProgram(this.viewerProgram);
+
+    // Set up min depth fbo
+    const BEAM_SIZE = 8;
+    this.minDepthFBO = gl.createFramebuffer();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.minDepthFBO);
+
+    const colorExt: WEBGL_color_buffer_float = gl.getExtension('EXT_color_buffer_float');
+    if (!colorExt) {
+      console.error('The the EXT_color_buffer_float is not available - not setting up beam optimization');
+      this.state.useBeamOptimization = false;
+      return;
+    }
+
+    gl.activeTexture(gl.TEXTURE1);
+    this.minDepthTex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, this.minDepthTex);
+    const width = Math.ceil(canvas.width / BEAM_SIZE);
+    const height = Math.ceil(canvas.height / BEAM_SIZE);
+
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, width, height, 0, gl.RGBA, gl.FLOAT, null);
+
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.minDepthTex, 0);
+    gl.drawBuffers([gl.COLOR_ATTACHMENT0]);
+
+    const fboStatus = gl.checkFramebufferStatus(gl.FRAMEBUFFER);
+    if (fboStatus !== gl.FRAMEBUFFER_COMPLETE) console.error('FBO error', fboStatus)
+
+    gl.bindTexture(gl.TEXTURE_2D, null);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   }
 
   //////////////////////////////////////////////////////////////
@@ -104,8 +176,10 @@ export default class Renderer {
   //////////////////////////////////////////////////////////////
   initUniforms() {
     const { gl } = this;
-    this.uniformDict = {} as any;
-    UNIFORMS.forEach(u => this.uniformDict[u] = gl.getUniformLocation(this.program, u));
+    this.viewerUniformDict = {} as any;
+    this.depthUniformDict = {} as any;
+    UNIFORMS.forEach(u => this.viewerUniformDict[u] = gl.getUniformLocation(this.viewerProgram, u));
+    UNIFORMS.forEach(u => this.depthUniformDict[u] = gl.getUniformLocation(this.depthProgram, u));
   }
 
   getProjectionFactor(pixelTolerance: number, screenDivisor: number) {
@@ -115,9 +189,8 @@ export default class Renderer {
     return inv_2tan_half_fovy / screen_tolerance;
   }
 
-  setInitialUniforms() {
-    const { canvas, gl, camera, uniformDict: ud, svdag, state } = this;
-    if (this.program === undefined) return;
+  setInitialUniforms(ud: UniformDict) {
+    const { canvas, gl, camera, svdag, state } = this;
 
     gl.uniform2f(ud.resolution, canvas.width, canvas.height);
 
@@ -144,6 +217,9 @@ export default class Renderer {
 
     // Todo: make this a vec4 like shadertoy
     gl.uniform1f(ud.time, new Date().getTime() / 1000 - state.startTime);
+
+    gl.uniform1i(ud.useBeamOptimization, state.useBeamOptimization ? 1 : 0);
+    gl.uniform1i(ud.minDepthTex, 1);
   }
 
   // setFrameUniforms() {
@@ -158,7 +234,13 @@ export default class Renderer {
     const { gl } = this;
     this.texture = gl.createTexture();
     gl.activeTexture(gl.TEXTURE0);
+    
+    // gl.useProgram(this.viewerProgram);
     gl.bindTexture(gl.TEXTURE_3D, this.texture);
+
+    // gl.useProgram(this.depthProgram);
+    // gl.bindTexture(gl.TEXTURE_3D, this.texture);
+    
     gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
     gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
     gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_S, gl.REPEAT);
@@ -184,6 +266,8 @@ export default class Renderer {
 
     const chunkStart = svdag.dataLoadedOffset / 4 - nNewNodes;
     console.log(chunkStart, svdag.dataLoadedOffset / 4, nNewNodes);
+
+    gl.activeTexture(gl.TEXTURE0);
 
     if (chunkStart === 0) {
       // For the first chunk, define the texture type and upload what data we have 
@@ -228,5 +312,4 @@ export default class Renderer {
       gl.texSubImage3D(gl.TEXTURE_3D, 0, xOffset, yOffset, zOffset, updateWidth, updateHeight, updateDepth, gl.RED_INTEGER, gl.UNSIGNED_INT, newNodes);
     }
   }
-
 }

@@ -16,7 +16,12 @@
       top: 50%;
       left: 50%;
       transform: translate(-50%, -50%);
-      image-rendering: optimizeSpeed;
+
+      /* Nearest neighbor interpolation */
+      image-rendering: -moz-crisp-edges;
+      image-rendering: -webkit-crisp-edges;
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
     }
     #overlay {
       position: absolute;
@@ -105,6 +110,11 @@
 
     <label for="uniqueColors" title="Assigns unique colors to each identical node in memory">Unique colors</label>
     <input type="checkbox" id="uniqueColors" value="false" onchange="setShowUniqueColors(this.checked)" />
+
+    <br /> 
+
+    <label for="beamOptim" title="Pre-render a low resolution depth texture to start the rays in the full-resolution image close to their hit point. The pixels in the low-res image can be seen as beams (of 8x8 pixels)">Beam optimization</label>
+    <input type="checkbox" id="beamOptim" checked="true" onchange="setUseBeamOptimization(this.checked)" />
 
     <br /> 
     
