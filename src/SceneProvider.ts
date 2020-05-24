@@ -1,6 +1,6 @@
 import { SVDAG } from "./SVDAG";
 import { vec3 } from "gl-matrix";
-import { RenderMode } from "./main";
+import { RenderMode } from "./Renderer";
 
 export type PreloadedSceneOption = {
   label: string;

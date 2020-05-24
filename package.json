@@ -19,6 +19,9 @@
   },
   "devDependencies": {
     "@types/gl-matrix": "^2.4.5",
+    "@typescript-eslint/eslint-plugin": "^2.34.0",
+    "@typescript-eslint/parser": "^2.34.0",
+    "eslint": "^7.0.0",
     "gh-pages": "^2.2.0",
     "ts-loader": "^7.0.3",
     "typescript": "^3.8.3",

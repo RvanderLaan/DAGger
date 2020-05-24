@@ -1,7 +1,7 @@
 import { vec3, quat, mat4 } from 'gl-matrix';
 
 import Camera from './Camera';
-import { IRendererState } from './main';
+import { IRendererState } from './Renderer';
 
 function bitCount(num: number) {
   let n = num;
@@ -27,15 +27,15 @@ export class SVDAG extends EncodedOctree {
   // Since the `nodes` array might get padded, store the original amount of data in here
   originalNodeLength: number;
 
-  initialized: boolean = false;
+  initialized = false;
   // byte offset (not 32 bit ints, but bytes)
-  dataLoadedOffset: number = 0;
+  dataLoadedOffset = 0;
 
-  renderPreferences: Partial<IRendererState & { spawnPosition: vec3 }> = {};
+  renderPreferences: Partial<IRendererState & { spawnPosition: vec3; moveSpeed: number }> = {};
 
   load(buffer: ArrayBuffer) {
     // Header
-    let i = this.parseHeader(buffer);
+    const i = this.parseHeader(buffer);
 
     // Nodes
     this.nodes.set(new Uint32Array(buffer.slice(i)));
@@ -89,7 +89,7 @@ export class SVDAG extends EncodedOctree {
     }
   }
 
-  castRay(o: vec3, d: vec3, maxIters = 100): { nodeIndex: number, hitPos: vec3, maxRayLength: number } | null {
+  castRay(o: vec3, d: vec3, maxIters = 100): { nodeIndex: number; hitPos: vec3; maxRayLength: number } | null {
     // const stack: number[] = []; // TODO: Reuse list of traversed node indices per level 
     
     // TODO: Find intersection of ray with next node instead of naively stepping with a small step size
@@ -106,7 +106,7 @@ export class SVDAG extends EncodedOctree {
     return null;
   }
 
-  getVoxel(pos: vec3): { nodeIndex: number, hitPos: vec3 } | null {
+  getVoxel(pos: vec3): { nodeIndex: number; hitPos: vec3 } | null {
     // Transform world position to the [0, 1] range
     // const gridPos = vec3.scale(vec3.create(), pos, 1 / (2 * this.rootSide));
     const nodeCenter = vec3.create();
