@@ -69,8 +69,14 @@ function setShowUniqueColors(val: boolean) {
 }
 win.setShowUniqueColors = setShowUniqueColors.bind(this);
 
-function setUseBeamOptimization(val: boolean) {
+function setUseBeamOptimization(val: boolean, disable?: boolean) {
   renderer.state.useBeamOptimization = val;
+
+  if (disable) {
+    const checkbox = (document.getElementById('beamOptim') as HTMLInputElement);
+    checkbox.checked = val;
+    checkbox.disabled = true;
+  }
 }
 win.setUseBeamOptimization = setUseBeamOptimization.bind(this);
 

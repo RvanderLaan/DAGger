@@ -145,7 +145,7 @@ export default class Renderer {
     const colorExt: WEBGL_color_buffer_float = gl.getExtension('EXT_color_buffer_float');
     if (!colorExt) {
       console.error('The the EXT_color_buffer_float is not available - not setting up beam optimization');
-      this.state.useBeamOptimization = false;
+      (window as any).setUseBeamOptimization(false, true); // TODO: Proper UI controller
       return;
     }
 
