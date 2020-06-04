@@ -1,6 +1,5 @@
-import { RenderMode } from "./Renderer";
 
-function loadVertShader(gl: WebGL2RenderingContext) {
+export function loadVertShader(gl: WebGL2RenderingContext) {
   // // https://www.saschawillems.de/blog/2016/08/13/vulkan-tutorial-on-rendering-a-fullscreen-quad-without-buffers/
   const vertSrc = `#version 300 es
     uniform float time;
@@ -18,7 +17,7 @@ function loadVertShader(gl: WebGL2RenderingContext) {
   return vertShader;
 }
 
-async function loadFragShader(gl: WebGL2RenderingContext, nLevels: number, mode: 'viewer' | 'depth' | 'pathtracing') {
+export async function loadRaycastFragShader(gl: WebGL2RenderingContext, nLevels: number, mode: 'viewer' | 'depth' | 'pathtracing') {
   const maxT3DTexels = gl.getParameter(gl.MAX_3D_TEXTURE_SIZE);
   const maxT3DTexelsPow2 = maxT3DTexels * maxT3DTexels;
 
@@ -44,12 +43,20 @@ async function loadFragShader(gl: WebGL2RenderingContext, nLevels: number, mode:
   return shader;
 }
 
-export async function loadProgram(gl: WebGL2RenderingContext, nLevels: number, mode: 'viewer' | 'depth' | 'pathtracing') {
-  // Setup shaders
-  const vertShader = loadVertShader(gl);
-  const fragShader = await loadFragShader(gl, nLevels, mode);
+export async function loadNormalFragShader(gl: WebGL2RenderingContext) {
+  const shaderSrcRes = await fetch('normalFromDepth.glsl');
+  const shaderSrc = await shaderSrcRes.text();
+  const shader = gl.createShader(gl.FRAGMENT_SHADER);
+  gl.shaderSource(shader, shaderSrc);
+  gl.compileShader(shader);
+  console.log(`Normal shader: `, gl.getShaderInfoLog(shader) || 'OK');
+  return shader;
+}
+
+export async function loadProgram(gl: WebGL2RenderingContext, vertShader: WebGLShader, fragShader: WebGLShader) {
 
   // Proper error is printed when we don't check for errors
+  // (Disabled since the error is less obvious than the built-in error message for some reason)
   // if (!gl.getShaderParameter(fragShader, gl.COMPILE_STATUS)
   //   || !gl.getShaderParameter(vertShader, gl.COMPILE_STATUS)) {
   //   throw new Error('Shader compilation failure');
@@ -69,5 +76,5 @@ export async function loadProgram(gl: WebGL2RenderingContext, nLevels: number, m
 
   gl.useProgram(program);
 
-  return [program, fragShader];
+  return program;
 }

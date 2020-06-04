@@ -319,6 +319,8 @@ async function init() {
 
   // Load the program & shaders
   await renderer.initShaders();
+  renderer.setupMinDepthFbo();
+
   renderer.initUniforms();
   renderer.setInitialUniforms(renderer.viewerUniformDict);
   

@@ -4,6 +4,7 @@
 #define TEX3D_SIZE_POW2 0
 #define VIEWER_MODE 1
 #define DEPTH_MODE 1
+#define PATH_TRACE_MODE 1
 
 #define MAX_STACK_DEPTH (INNER_LEVELS+1u)
 
@@ -541,6 +542,45 @@ void main() {
 		fragColor = result;
 	else
 		fragColor = vec4(1e30f); // no intersection - depth is infinite
+}
+
+#elif PATH_TRACE_MODE
+
+void main() {
+  vec2 screenCoords = (gl_FragCoord.xy / resolution) * 2.0 - 1.0;
+	vec3 hitPos = texelFetch(hitPosTex, coord, 0).xyz;
+	if(hitPos == vec3(0,0,0)) discard;
+	// const vec3 hitNorm = texelFetch(hitNormTex, coord, 0).xyz;
+	const float cellSize = texelFetch(depthTex, coord, 0).y;
+	hitPos += hitNorm * 1e-3;
+
+	Ray aoRay;
+	aoRay.o = hitPos;
+
+	//const vec3 rvec = gl_FragCoord.xyz; // TODO review this !!!
+	const vec3 rvec = vec3(0,1,0); // TODO review this !!!
+	//const vec3 rvec = normalize(vec3(gl_FragCoord.xy, gl_FragCoord.x * gl_FragCoord.y));
+	//const vec3 rvec = normalize(vec3(gl_FragCoord.x, 0, gl_FragCoord.y));
+	const vec3 tangent = normalize(rvec - hitNorm * dot(rvec, hitNorm));
+	const vec3 bitangent = cross(hitNorm, tangent);
+	//const mat3 tnb = mat3(tangent, bitangent, hitNorm);
+	const mat3 tnb = mat3(tangent, hitNorm, bitangent);
+	float largo = 0.5;
+	const vec2 t_min_max = vec2(0,largo);
+	const float projFactor = largo / cellSize;
+	float k = 0;
+	
+	traversal_status ts_ignore;
+
+	for(int i=0; i<numAORays; i++) {
+		aoRay.d = normalize(tnb *  hsSamples[(i+int(gl_FragCoord.x*gl_FragCoord.y))%N_HS_SAMPLES]);
+		//aoRay.d = normalize(tnb *  hsSamples[i]);
+		vec3 norm;
+		vec4 result = trace_ray(aoRay, t_min_max, projFactor, norm, ts_ignore);
+		if(result.x > 0) k += 1.0;// - (result.x/0.3);
+	}
+	float visibility = (numAORays>0) ? 1.0 - (k/float(numAORays)) : 1.0;
+	output_t = visibility * visibility;
 }
 
 #endif

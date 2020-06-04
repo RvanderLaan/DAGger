@@ -1,6 +1,6 @@
 import Camera from './Camera';
 import { SVDAG } from './SVDAG'
-import { loadProgram } from './ShaderUtils';
+import { loadProgram, loadVertShader, loadRaycastFragShader, loadNormalFragShader } from './ShaderUtils';
 
 // Coupled to the glsl shader
 const UNIFORMS = [
@@ -28,6 +28,35 @@ export enum RenderMode {
   PATH_TRACING = 3,
 }
 
+/**
+ * Path tracing todo:
+ * - Separate shader define for path tracing
+ * - Set up full depth framebuffer with normals (maybe screen space normals in second pass?)
+ * - Generate random sample
+ * - Reset screen frame buffer when camera transformation changes
+ * 
+ * Pseudocode:
+ * renderPathTrace() {
+ *  if (cameraOrientationChanged) {
+ * 
+ *    renderMinDepthTex();
+ *    
+ *    bindOffscreenFrameBuffer   
+ * 
+ *    clearDefaultFB();
+ * 
+ *    renderPrimary(); // full depth tex
+ * 
+ *    // render normals to texture based on screen space depth - basically dX and dY gradient (needs clipped tex coords)
+ *    // Improvement: https://wickedengine.net/2019/09/22/improved-normal-reconstruction-from-depth/
+ *    screenSpaceNormals(); 
+ * 
+ *  } else {
+ *    renderPathTrace();
+ *  }
+ * }
+ */
+
 export interface IRendererState {
   renderMode: RenderMode;
   startTime: number;
@@ -43,23 +72,34 @@ export interface IRendererState {
 
 export default class Renderer {
   gl: WebGL2RenderingContext;
-  viewerUniformDict: UniformDict;
-  depthUniformDict: UniformDict;
 
   svdag: SVDAG;
 
   viewerProgram: WebGLProgram;
-  viewerFragShader: WebGLShader;
+  viewerUniformDict: UniformDict;
+
+  pathTraceProgram: WebGLProgram;
+  pathTraceUniformDict: UniformDict;
+
   depthProgram: WebGLProgram;
+  depthUniformDict: UniformDict;
+
+  normalProgram: WebGLProgram;
+  normalUniformDict: UniformDict;
+
+  /** The 3D texture containing scene data */
   texture: WebGLTexture;
-  // controller: OrbitController;
 
   maxT3DTexels: number;
 
   minDepthFBO: WebGLFramebuffer;
   minDepthTex: WebGLTexture;
 
-  fullDepthTexId?: number;
+  fullDepthFBO: WebGLFramebuffer;
+  fullDepthTexId: WebGLTexture;
+
+  normalFBO: WebGLFramebuffer;
+  normalTexId: WebGLTexture;
 
   state: IRendererState = {
     startTime: new Date().getTime() / 1000,
@@ -131,11 +171,25 @@ export default class Renderer {
   }
 
   async initShaders() {
-    const { gl, svdag, canvas } = this;
-    [this.viewerProgram, this.viewerFragShader] = await loadProgram(gl, svdag.nLevels, 'viewer');
-    [this.depthProgram] = await loadProgram(gl, svdag.nLevels, 'depth');
+    const { gl, svdag } = this;
+    const vertShader = loadVertShader(gl); // single triangle filling up the screen
+    const viewerFragShader = await loadRaycastFragShader(gl, svdag.nLevels, 'viewer');
+    const pathTraceFragShader = await loadRaycastFragShader(gl, svdag.nLevels, 'pathtracing');
+    const depthFragShader = await loadRaycastFragShader(gl, svdag.nLevels, 'depth');
+    const normalFragShader = await loadNormalFragShader(gl);
+
+    this.viewerProgram = await loadProgram(gl, vertShader, viewerFragShader);
+    this.pathTraceProgram = await loadProgram(gl, vertShader, pathTraceFragShader);
+    this.depthProgram = await loadProgram(gl, vertShader, depthFragShader);
+    this.normalProgram = await loadProgram(gl, vertShader, normalFragShader);
     
     gl.useProgram(this.viewerProgram);
+
+  }
+
+  // TODO: Generic function for creating FBO and texture; needed for minDepth, fullDepth and normal tex
+  setupMinDepthFbo() {
+    const { gl, canvas } = this;
 
     // Set up min depth fbo
     const BEAM_SIZE = 8;
