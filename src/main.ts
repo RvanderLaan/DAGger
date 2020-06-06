@@ -194,8 +194,10 @@ export async function loadScene(sceneOption: SceneOption) {
 }
 
 async function loadSelectedScene() {
+  if (sceneList.length === 0) throw new Error('No scenes available!');
+
   const selector = document.getElementById('sceneSelector') as HTMLSelectElement;
-  const selectedSceneIndex = parseInt(selector.options[selector.selectedIndex].value);
+  const selectedSceneIndex = parseInt(selector.options[selector.selectedIndex].value) || 0;
 
   // Dispose current scene first
   renderer.deleteNodesTexture();
@@ -212,6 +214,7 @@ async function loadSelectedScene() {
   const oldBboxCenter = scene?.bboxCenter || vec3.create();
 
   renderer.createNodesTexture();
+  console.log(selectedSceneIndex, sceneList)
   scene = await loadScene(sceneList[selectedSceneIndex]);
 
   setDrawLevel(scene.nLevels);
@@ -292,6 +295,13 @@ async function init() {
   const maxNodes = Math.floor(Math.pow(maxT3DTexels, 3) / 5); // average of 4 pointers per node + 1 header texel (32 bit texels)
   console.log(`Max 3D tex = ${maxT3DTexels}. Max avg. nodes ~= ${maxNodes} = ${Math.round(maxNodes / 1e6)} MNodes`);
 
+  const colorExt: WEBGL_color_buffer_float = gl.getExtension('EXT_color_buffer_float');
+  if (!colorExt) {
+    console.error('The the EXT_color_buffer_float extension is not available - some features might not work');
+    (window as any).setUseBeamOptimization(false, true); // TODO: Proper UI controller
+    return;
+  }
+
   gl.clear(gl.COLOR_BUFFER_BIT);
 
   // Load available scenes
@@ -314,17 +324,21 @@ async function init() {
   
   controller = new OrbitController(camera, 1);
 
+  // TODO: Many of these things can be done in parallel instead of awaiting each.
+
   await loadSelectedScene();
   controller.init();
 
   // Load the program & shaders
   await renderer.initShaders();
-  renderer.setupMinDepthFbo();
-
+  // Set up FBOs and textures
+  renderer.initialize();
+  // Set up dicts of uniform locations for each shader program
   renderer.initUniforms();
+  // Set the initial uniforms for the active shader program
   renderer.setInitialUniforms(renderer.viewerUniformDict);
   
-  // We don't have any vertex attrs, but webgl complains if we don't enable at least one
+  // We don't have any vertex attrs, but webgl complains if we don't enable at least one (doesn't work for some reason)
   // const buf = gl.createBuffer();
   // gl.bindBuffer(gl.ARRAY_BUFFER, buf);
   // gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([0]), gl.STATIC_DRAW);

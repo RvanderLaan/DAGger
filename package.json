@@ -7,8 +7,8 @@
   "scripts": {
     "compile": "tsc",
     "watch": "webpack -w --mode=development --devtool=inline-source-map",
-    "serve": "python3 ./src/Server.py",
-    "build": "webpack --mode=production",
+    "serve": "http-server ./static",
+    "build": "webpack --mode=production --devtool=source-map",
     "predeploy": "yarn run build",
     "deploy": "gh-pages -d static"
   },
@@ -23,6 +23,7 @@
     "@typescript-eslint/parser": "^2.34.0",
     "eslint": "^7.0.0",
     "gh-pages": "^2.2.0",
+    "http-server": "^0.12.3",
     "ts-loader": "^7.0.3",
     "typescript": "^3.8.3",
     "webpack": "^4.43.0",

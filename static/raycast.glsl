@@ -36,8 +36,13 @@ uniform vec3 lightPos;
 uniform bool enableShadows;
 uniform float normalEpsilon;
 
-uniform sampler2D minDepthTex;
 uniform bool useBeamOptimization;
+uniform sampler2D minDepthTex;  
+uniform sampler2D depthTex;     // is depth tex even needed when hitPosTex is available? 
+                                // Ah yes it is, it's used to get cellSize as well, not just depth. 
+                                // TODO: Rename to primaryVisibilityTexture? primVisTex?
+uniform sampler2D hitNormTex;      // this one does not need to be 32 bit float, always a unit vector
+uniform sampler2D hitPosTex;    // this one does need 32 bit high accuracy
 
 // uniform uint levelOffsets[INNER_LEVELS];
 
@@ -419,6 +424,18 @@ void main(void) {
 		return;
 	}
 #endif
+
+#if 0 // DEBUG for seeing full-depth pass
+  float fullDepthTexSample = texelFetch(depthTex, ivec2(gl_FragCoord.xy), 0).x;
+  fragColor = vec4(vec3(fullDepthTexSample) / length(sceneBBoxMax - sceneBBoxMin), 1);
+  return;
+#endif
+
+#if 1 // DEBUG for seeing normal pass
+  vec3 hitNormTexSample = texelFetch(hitNormTex, ivec2(gl_FragCoord.xy), 0).xyz;
+  fragColor = vec4(hitNormTexSample, 1);
+  return;
+#endif
   
   // Unit direction ray.
   // vec3 rd = normalize(vec3(screenCoords, 1.));
@@ -546,35 +563,77 @@ void main() {
 
 #elif PATH_TRACE_MODE
 
+uint wang_hash(inout uint seed)
+{
+    seed = uint(seed ^ uint(61)) ^ uint(seed >> uint(16));
+    seed *= uint(9);
+    seed = seed ^ (seed >> 4);
+    seed *= uint(0x27d4eb2d);
+    seed = seed ^ (seed >> 15);
+    return seed;
+}
+ 
+float RandomFloat01(inout uint state)
+{
+    return float(wang_hash(state)) / 4294967296.0;
+}
+ 
+vec3 RandomUnitVector(inout uint state)
+{
+    float z = RandomFloat01(state) * 2.0f - 1.0f;
+    float a = RandomFloat01(state) * c_twopi;
+    float r = sqrt(1.0f - z * z);
+    float x = r * cos(a);
+    float y = r * sin(a);
+    return vec3(x, y, z);
+}
+
 void main() {
-  vec2 screenCoords = (gl_FragCoord.xy / resolution) * 2.0 - 1.0;
+  vec2 coord = ivec2(gl_FragCoord.xy);
 	vec3 hitPos = texelFetch(hitPosTex, coord, 0).xyz;
-	if(hitPos == vec3(0,0,0)) discard;
-	// const vec3 hitNorm = texelFetch(hitNormTex, coord, 0).xyz;
-	const float cellSize = texelFetch(depthTex, coord, 0).y;
-	hitPos += hitNorm * 1e-3;
+	if (hitPos == vec3(0,0,0)) discard;
+	float cellSize = texelFetch(depthTex, coord, 0).y;
+	vec3 hitNorm = texelFetch(hitNormTex, coord, 0).xyz;
+	// hitPos += hitNorm * 1e-3; // add epsilon, not sure why yet?
 
-	Ray aoRay;
-	aoRay.o = hitPos;
+	Ray r;
+	r.o = hitPos;
 
-	//const vec3 rvec = gl_FragCoord.xyz; // TODO review this !!!
-	const vec3 rvec = vec3(0,1,0); // TODO review this !!!
-	//const vec3 rvec = normalize(vec3(gl_FragCoord.xy, gl_FragCoord.x * gl_FragCoord.y));
-	//const vec3 rvec = normalize(vec3(gl_FragCoord.x, 0, gl_FragCoord.y));
-	const vec3 tangent = normalize(rvec - hitNorm * dot(rvec, hitNorm));
-	const vec3 bitangent = cross(hitNorm, tangent);
-	//const mat3 tnb = mat3(tangent, bitangent, hitNorm);
-	const mat3 tnb = mat3(tangent, hitNorm, bitangent);
+
+  // Path tracing based on https://blog.demofox.org/2020/05/25/casual-shadertoy-path-tracing-1-basic-camera-diffuse-emissive/
+  // initialize a random number state based on frag coord and frame
+  uint rngState = uint(uint(fragCoord.x) * uint(1973) + uint(fragCoord.y) * uint(9277) + uint(iFrame) * uint(26699)) | uint(1);
+
+
+
+
+
+
+  // Sampling based on Screen space AO from https://lingtorp.com/2019/01/18/Screen-Space-Ambient-Occlusion.html
+
+  // Random vector to orient the hemisphere
+	//vec3 rvec = gl_FragCoord.xyz; // TODO review this !!!
+	vec3 rvec = vec3(0,1,0); // TODO review this !!!
+	//vec3 rvec = normalize(vec3(gl_FragCoord.xy, gl_FragCoord.x * gl_FragCoord.y));
+	//vec3 rvec = normalize(vec3(gl_FragCoord.x, 0, gl_FragCoord.y));
+
+  // vec3 rvec = texture(noise_sampler, gl_FragCoord.xy * noise_scale).xyz; 
+
+	vec3 tangent = normalize(rvec - hitNorm * dot(rvec, hitNorm));
+	vec3 bitangent = cross(hitNorm, tangent);
+	//mat3 tbn = mat3(tangent, bitangent, hitNorm);
+	mat3 tbn = mat3(tangent, hitNorm, bitangent); // f: Tangent -> View space
+
 	float largo = 0.5;
-	const vec2 t_min_max = vec2(0,largo);
-	const float projFactor = largo / cellSize;
-	float k = 0;
+	vec2 t_min_max = vec2(0,largo);
+	float projFactor = largo / cellSize;
+	float k = 0; // "ao" value
 	
 	traversal_status ts_ignore;
 
-	for(int i=0; i<numAORays; i++) {
-		aoRay.d = normalize(tnb *  hsSamples[(i+int(gl_FragCoord.x*gl_FragCoord.y))%N_HS_SAMPLES]);
-		//aoRay.d = normalize(tnb *  hsSamples[i]);
+	for (int i = 0; i < numAORays; i++) {
+		aoRay.d = normalize(tbn *  hsSamples[(i+int(gl_FragCoord.x*gl_FragCoord.y))%N_HS_SAMPLES]);
+		//aoRay.d = normalize(tbn *  hsSamples[i]);
 		vec3 norm;
 		vec4 result = trace_ray(aoRay, t_min_max, projFactor, norm, ts_ignore);
 		if(result.x > 0) k += 1.0;// - (result.x/0.3);
