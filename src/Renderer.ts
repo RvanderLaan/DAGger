@@ -183,7 +183,6 @@ export default class Renderer {
       gl.activeTexture(gl.TEXTURE2);
       gl.bindTexture(gl.TEXTURE_2D, null);
 
-      gl.useProgram(this.depthProgram);
       this.setInitialUniforms(depthUniformDict);
 
       gl.viewport(0, 0, canvas.width, canvas.height);
@@ -198,13 +197,12 @@ export default class Renderer {
 
       // Normal pass
       gl.useProgram(this.normalProgram);
-      gl.bindFramebuffer(gl.FRAMEBUFFER, this.fullDepthFBO);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, this.normalFBO);
 
       // Enable full-depth tex and disable norm tex
       gl.activeTexture(gl.TEXTURE3);
       gl.bindTexture(gl.TEXTURE_2D, null);
 
-      gl.useProgram(this.normalProgram);
       this.setNormalUniforms(normalUniformDict);
 
       gl.clearColor(0, 0, 0, 0);
