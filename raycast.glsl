@@ -4,6 +4,7 @@
 #define TEX3D_SIZE_POW2 0
 #define VIEWER_MODE 1
 #define DEPTH_MODE 1
+#define PATH_TRACE_MODE 1
 
 #define MAX_STACK_DEPTH (INNER_LEVELS+1u)
 
@@ -12,6 +13,7 @@ precision highp float;
 out vec4 fragColor;
 
 uniform float time;
+uniform uint ptFrame; // how many path trace frames have been rendered
 uniform vec2 resolution;
 
 uniform mat4 viewMatInv;
@@ -35,8 +37,13 @@ uniform vec3 lightPos;
 uniform bool enableShadows;
 uniform float normalEpsilon;
 
-uniform sampler2D minDepthTex;
 uniform bool useBeamOptimization;
+uniform sampler2D minDepthTex;  
+uniform sampler2D depthTex;     // is depth tex even needed when hitPosTex is available? 
+                                // Ah yes it is, it's used to get cellSize as well, not just depth. 
+                                // TODO: Rename to primaryVisibilityTexture? primVisTex?
+uniform sampler2D hitNormTex;      // this one does not need to be 32 bit float, always a unit vector
+uniform sampler2D hitPosTex;    // this one does need 32 bit high accuracy
 
 // uniform uint levelOffsets[INNER_LEVELS];
 
@@ -418,6 +425,24 @@ void main(void) {
 		return;
 	}
 #endif
+
+#if 0 // DEBUG for seeing full-depth pass
+  float fullDepthTexSample = texelFetch(depthTex, ivec2(gl_FragCoord.xy), 0).x;
+  fragColor = vec4(vec3(fullDepthTexSample) / length(sceneBBoxMax - sceneBBoxMin), 1);
+  return;
+#endif
+
+#if 0 // DEBUG for seeing normal pass
+  vec3 hitNormTexSample = texelFetch(hitNormTex, ivec2(gl_FragCoord.xy), 0).xyz;
+  fragColor = vec4(hitNormTexSample, 1);
+  return;
+#endif
+
+  if (viewerRenderMode == 4) { // normals
+    vec3 hitNormTexSample = texelFetch(hitNormTex, ivec2(gl_FragCoord.xy), 0).xyz;
+    fragColor = vec4(hitNormTexSample, 1);
+    return;
+  }
   
   // Unit direction ray.
   // vec3 rd = normalize(vec3(screenCoords, 1.));
@@ -478,7 +503,7 @@ void main(void) {
       vec3 lightDir = normalize(lightPos - hitPos);
       float t = 0.5 + 0.5 * max(dot(hitNorm, lightDir), 0.);
       color = vec3(t);
-    } else { // TODO: PATH TRACING???!!!
+    } else if (viewerRenderMode == 3) { // TODO: PATH TRACING???!!!
       color = r.d;
     }
 
@@ -488,7 +513,8 @@ void main(void) {
         (3 * nodeIndex) % 200,
         (2 * nodeIndex) % 300
       ) / vec3(100, 200, 300));
-      color *= randomColor;
+      // color *= randomColor;
+      color *= hitNorm;
     }
   }
   else if (result.x >= -2. ) { // inside BBox, but no intersection
@@ -541,6 +567,131 @@ void main() {
 		fragColor = result;
 	else
 		fragColor = vec4(1e30f); // no intersection - depth is infinite
+}
+
+#elif PATH_TRACE_MODE
+
+uint wang_hash(inout uint seed) {
+  seed = uint(seed ^ uint(61)) ^ uint(seed >> uint(16));
+  seed *= uint(9);
+  seed = seed ^ (seed >> 4);
+  seed *= uint(0x27d4eb2d);
+  seed = seed ^ (seed >> 15);
+  return seed;
+}
+ 
+float RandomFloat01(inout uint state) {
+    return float(wang_hash(state)) / 4294967296.0;
+}
+ 
+vec3 RandomUnitVector(inout uint state) {
+  float z = RandomFloat01(state) * 2.0f - 1.0f;
+  float a = RandomFloat01(state) * 3.14159 * 2.0f;
+  float r = sqrt(1.0f - z * z);
+  float x = r * cos(a);
+  float y = r * sin(a);
+  return vec3(x, y, z);
+}
+
+void main() {
+  // Path tracing based on https://blog.demofox.org/2020/05/25/casual-shadertoy-path-tracing-1-basic-camera-diffuse-emissive/
+
+  // vec2 coord = ivec2(gl_FragCoord.xy);
+	// vec3 hitPos = texelFetch(hitPosTex, coord, 0).xyz;
+	// if (hitPos == vec3(0,0,0)) discard;
+	// float cellSize = texelFetch(depthTex, coord, 0).y;
+	// vec3 hitNorm = texelFetch(hitNormTex, coord, 0).xyz;
+	// hitPos += hitNorm * 1e-3; // add epsilon, not sure why yet?
+
+
+  // initialize a random number state based on frag coord and frame
+  uint rngState = uint(uint(gl_FragCoord.x) * uint(1973) + uint(gl_FragCoord.y) * uint(9277) + uint(ptFrame) * uint(26699)) | uint(1);
+
+  vec2 screenCoords = (gl_FragCoord.xy / resolution) * 2.0 - 1.0;
+
+  Ray r = computeCameraRay(screenCoords);
+  float epsilon = 1E-3f;
+  vec2 t_min_max = vec2(useBeamOptimization ? 0.95 * getMinT(8) : 0., 1e30f);
+
+  vec3 hitNorm;
+  vec4 result = t_min_max.x > 1e25
+    ? vec4(-4)
+    : trace_ray(r, t_min_max, projectionFactor, hitNorm);
+
+  // Sample the scene by bouncing a ray around through for this pixel
+  vec3 color = vec3(0.0f, 0.0f, 0.0f);
+  
+  const int nBounces = 4;           // how many rays to bounce around per pixel 
+  const vec3 albedo = vec3(0.8);    // color of voxel material
+  vec3 throughput = vec3(1); // 
+
+  vec3 hitPos = r.o + result.x * r.d;
+
+	r.o = hitPos;
+  r.d = normalize(hitNorm + RandomUnitVector(rngState));
+
+  t_min_max.x = 1e-3f;
+
+  for (int i = 0; i < nBounces; i++) {
+    stack_size = 0u; // might need to reset the stack. Shouldn't be needed though, as ray starts where previous ends (?)
+	  result = trace_ray(r, t_min_max, projectionFactor, hitNorm);
+
+    if (result.x < 0.) { // no hit: For now, background is pure white light, could use ray dir as light color
+      color += vec3(0.8) * throughput; 
+      break;
+    }
+
+    // Next ray to bounce around starts at the hit position of the previous ray
+    r.o = r.o + result.x * r.d;
+    // And points into random direction relative to the hit normal
+    r.d = normalize(hitNorm + RandomUnitVector(rngState));
+
+    // add emissive lighting to color
+    color += 0.05 * throughput; // (everything is a little emissive just to test)
+
+    // color of light carried by ray is affected by the material it hits
+    throughput *= albedo;
+  }
+
+  // average the frames together
+  // vec3 lastFrameColor = texelFetch(screenFBO, coord).rgb;
+  // color = mix(lastFrameColor, color, 1.0f / float(ptFrame+1));
+
+  fragColor = vec4(color, 1);
+
+#if 0 // SSAO code
+  // Sampling based on Screen space AO from https://lingtorp.com/2019/01/18/Screen-Space-Ambient-Occlusion.html
+
+  // Random vector to orient the hemisphere
+	//vec3 rvec = gl_FragCoord.xyz; // TODO review this !!!
+	vec3 rvec = vec3(0,1,0); // TODO review this !!!
+	//vec3 rvec = normalize(vec3(gl_FragCoord.xy, gl_FragCoord.x * gl_FragCoord.y));
+	//vec3 rvec = normalize(vec3(gl_FragCoord.x, 0, gl_FragCoord.y));
+
+  // vec3 rvec = texture(noise_sampler, gl_FragCoord.xy * noise_scale).xyz; 
+
+	vec3 tangent = normalize(rvec - hitNorm * dot(rvec, hitNorm));
+	vec3 bitangent = cross(hitNorm, tangent);
+	//mat3 tbn = mat3(tangent, bitangent, hitNorm);
+	mat3 tbn = mat3(tangent, hitNorm, bitangent); // f: Tangent -> View space
+
+	float largo = 0.5;
+	vec2 t_min_max = vec2(0,largo);
+	float projFactor = largo / cellSize;
+	float k = 0; // "ao" value
+	
+	traversal_status ts_ignore;
+
+	for (int i = 0; i < numAORays; i++) {
+		aoRay.d = normalize(tbn *  hsSamples[(i+int(gl_FragCoord.x*gl_FragCoord.y))%N_HS_SAMPLES]);
+		//aoRay.d = normalize(tbn *  hsSamples[i]);
+		vec3 norm;
+		vec4 result = trace_ray(aoRay, t_min_max, projFactor, norm, ts_ignore);
+		if(result.x > 0) k += 1.0;// - (result.x/0.3);
+	}
+	float visibility = (numAORays>0) ? 1.0 - (k/float(numAORays)) : 1.0;
+	output_t = visibility * visibility;
+#endif
 }
 
 #endif
