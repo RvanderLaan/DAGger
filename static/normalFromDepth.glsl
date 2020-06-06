@@ -3,7 +3,7 @@
 precision highp float;
 
 uniform sampler2D depthTex;
-uniform mat4 viewMatInv;
+uniform mat4 viewProjMatInv;
 
 out vec3 fragColor;
 
@@ -13,9 +13,9 @@ out vec3 fragColor;
 
 vec3 reconstructPosition(in vec2 uv, in float z) {
   float x = uv.x * 2.0f - 1.0f;
-  float y = (1.0 - uv.y) * 2.0f - 1.0f;
+  float y = uv.y * 2.0f - 1.0f;
   vec4 position_s = vec4(x, y, z, 1.0f);
-  vec4 position_v = viewMatInv * position_s;
+  vec4 position_v = viewProjMatInv * position_s;
   return position_v.xyz / position_v.w;
 }
 
@@ -37,6 +37,7 @@ vec3 getNormal(in vec2 p) {
   vec3 P2 = reconstructPosition(uv2, depth2);
 
   vec3 normal = normalize(cross(P2 - P0, P1 - P0));
+
   return normal;
 }
 

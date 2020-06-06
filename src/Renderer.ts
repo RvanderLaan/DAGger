@@ -1,6 +1,7 @@
 import Camera from './Camera';
 import { SVDAG } from './SVDAG'
 import { loadProgram, loadVertShader, loadRaycastFragShader, loadNormalFragShader } from './ShaderUtils';
+import { mat4 } from 'gl-matrix';
 
 // Coupled to the glsl shader
 const UNIFORMS = [
@@ -13,11 +14,12 @@ const UNIFORMS = [
   'selectedVoxelIndex', 'uniqueColors',
   'lightPos', 'enableShadows', 'normalEpsilon',
   'minDepthTex', 'useBeamOptimization',
-  'depthTex', 'hitNormTex'
+  'depthTex', 'hitNormTex',
+  'ptFrame', 'screenTex'
 ] as const;
 type Uniform = typeof UNIFORMS[number];
 
-const NORMAL_UNIFORMS = ['depthTex', 'viewMatInv'] as const;
+const NORMAL_UNIFORMS = ['depthTex', 'viewProjMatInv'] as const;
 type NormalUniform = typeof NORMAL_UNIFORMS[number];
 
 // Dict of uniform name to its ID
@@ -70,6 +72,7 @@ export interface IRendererState {
   startTime: number;
   time: number;
   frame: number;
+  pathTraceFrame: number;
   pixelTolerance: number;
   renderScale: number;
   drawLevel: number;
@@ -113,6 +116,7 @@ export default class Renderer {
     startTime: new Date().getTime() / 1000,
     time: 0,
     frame: 0,
+    pathTraceFrame: 0,
     pixelTolerance: 1,
     renderScale: 1,
     drawLevel: 1,
@@ -176,7 +180,7 @@ export default class Renderer {
     }
 
     // For normal rendering, render a full-depth texture
-    // if (state.renderMode === RenderMode.NORMAL) {
+    if (state.renderMode === RenderMode.NORMAL) {
       // Full-depth pass
       gl.useProgram(this.depthProgram);
       gl.bindFramebuffer(gl.FRAMEBUFFER, this.fullDepthFBO);
@@ -211,7 +215,40 @@ export default class Renderer {
 
       gl.activeTexture(gl.TEXTURE3);
       gl.bindTexture(gl.TEXTURE_2D, this.normalTex);
-    // }
+    }
+
+    if (state.renderMode === RenderMode.PATH_TRACING) {
+      if (state.pathTraceFrame === 0) {
+        // Initial render for path tracing: Render hitPosTex and hitNormTex for primary visibility rays
+
+      } else {
+        // Subsequent frames render light bounces
+
+        // TODO: Since you cannot read and write to the same texture,
+        // two textures are needed and we need to swap between them every frame
+        // and then render the latest one to the screen with ANOTHER full-screen quad shader
+
+
+        // TEMPORARY
+        // Reset frame buffer so we can render to the screen
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+        
+        // Use the viewer program for rendering to the screen
+        gl.useProgram(this.pathTraceProgram);
+        
+        // TODO: Only update uniforms when they change, not all of them every time
+        this.setInitialUniforms(this.pathTraceUniformDict);
+
+        // Render 
+        gl.viewport(0, 0, canvas.width, canvas.height);
+        gl.clearColor(0, 0, 0, 1);
+        gl.clear(gl.COLOR_BUFFER_BIT);
+        gl.drawArrays(gl.TRIANGLES, 0, 3);
+      }
+
+      state.pathTraceFrame++;
+      return; 
+    }
 
     // Reset frame buffer so we can render to the screen
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
@@ -241,12 +278,12 @@ export default class Renderer {
     const viewerFragShader = await loadRaycastFragShader(gl, svdag.nLevels, 'viewer');
     const depthFragShader = await loadRaycastFragShader(gl, svdag.nLevels, 'depth');
     const normalFragShader = await loadNormalFragShader(gl);
-    // const pathTraceFragShader = await loadRaycastFragShader(gl, svdag.nLevels, 'pathtracing');
+    const pathTraceFragShader = await loadRaycastFragShader(gl, svdag.nLevels, 'pathtracing');
 
     this.viewerProgram = await loadProgram(gl, vertShader, viewerFragShader);
     this.depthProgram = await loadProgram(gl, vertShader, depthFragShader);
     this.normalProgram = await loadProgram(gl, vertShader, normalFragShader);
-    // this.pathTraceProgram = await loadProgram(gl, vertShader, pathTraceFragShader);
+    this.pathTraceProgram = await loadProgram(gl, vertShader, pathTraceFragShader);
     
     gl.useProgram(this.viewerProgram);
 
@@ -307,7 +344,7 @@ export default class Renderer {
     UNIFORMS.forEach(u => this.viewerUniformDict[u] = gl.getUniformLocation(this.viewerProgram, u));
     UNIFORMS.forEach(u => this.depthUniformDict[u] = gl.getUniformLocation(this.depthProgram, u));
     NORMAL_UNIFORMS.forEach(u => this.normalUniformDict[u] = gl.getUniformLocation(this.normalProgram, u));
-    // UNIFORMS.forEach(u => this.pathTraceUniformDict[u] = gl.getUniformLocation(this.pathTraceProgram, u));
+    UNIFORMS.forEach(u => this.pathTraceUniformDict[u] = gl.getUniformLocation(this.pathTraceProgram, u));
   }
 
   getProjectionFactor(pixelTolerance: number, screenDivisor: number) {
@@ -345,18 +382,19 @@ export default class Renderer {
 
     // Todo: make this a vec4 like shadertoy
     gl.uniform1f(ud.time, new Date().getTime() / 1000 - state.startTime);
+    gl.uniform1ui(ud.ptFrame, state.pathTraceFrame);
 
     gl.uniform1i(ud.useBeamOptimization, state.useBeamOptimization ? 1 : 0);
     gl.uniform1i(ud.minDepthTex, 1);
     gl.uniform1i(ud.depthTex, 2);
     gl.uniform1i(ud.hitNormTex, 3);
-
+    gl.uniform1i(ud.screenTex, 4);
   }
 
   setNormalUniforms(ud: NormalUniformDict) {
     const { gl, camera } = this;
     
-    gl.uniformMatrix4fv(ud.viewMatInv, false, camera.viewMatInv);
+    gl.uniformMatrix4fv(ud.viewProjMatInv, false, mat4.invert(mat4.create(), mat4.mul(mat4.create(), camera.projMat, camera.viewMat)));
     gl.uniform1i(ud.depthTex, 2);
   }
 

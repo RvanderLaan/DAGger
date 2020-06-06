@@ -13,6 +13,7 @@ precision highp float;
 out vec4 fragColor;
 
 uniform float time;
+uniform uint ptFrame; // how many path trace frames have been rendered
 uniform vec2 resolution;
 
 uniform mat4 viewMatInv;
@@ -431,11 +432,17 @@ void main(void) {
   return;
 #endif
 
-#if 1 // DEBUG for seeing normal pass
+#if 0 // DEBUG for seeing normal pass
   vec3 hitNormTexSample = texelFetch(hitNormTex, ivec2(gl_FragCoord.xy), 0).xyz;
   fragColor = vec4(hitNormTexSample, 1);
   return;
 #endif
+
+  if (viewerRenderMode == 4) { // normals
+    vec3 hitNormTexSample = texelFetch(hitNormTex, ivec2(gl_FragCoord.xy), 0).xyz;
+    fragColor = vec4(hitNormTexSample, 1);
+    return;
+  }
   
   // Unit direction ray.
   // vec3 rd = normalize(vec3(screenCoords, 1.));
@@ -496,7 +503,7 @@ void main(void) {
       vec3 lightDir = normalize(lightPos - hitPos);
       float t = 0.5 + 0.5 * max(dot(hitNorm, lightDir), 0.);
       color = vec3(t);
-    } else { // TODO: PATH TRACING???!!!
+    } else if (viewerRenderMode == 3) { // TODO: PATH TRACING???!!!
       color = r.d;
     }
 
@@ -506,7 +513,8 @@ void main(void) {
         (3 * nodeIndex) % 200,
         (2 * nodeIndex) % 300
       ) / vec3(100, 200, 300));
-      color *= randomColor;
+      // color *= randomColor;
+      color *= hitNorm;
     }
   }
   else if (result.x >= -2. ) { // inside BBox, but no intersection
@@ -563,52 +571,95 @@ void main() {
 
 #elif PATH_TRACE_MODE
 
-uint wang_hash(inout uint seed)
-{
-    seed = uint(seed ^ uint(61)) ^ uint(seed >> uint(16));
-    seed *= uint(9);
-    seed = seed ^ (seed >> 4);
-    seed *= uint(0x27d4eb2d);
-    seed = seed ^ (seed >> 15);
-    return seed;
+uint wang_hash(inout uint seed) {
+  seed = uint(seed ^ uint(61)) ^ uint(seed >> uint(16));
+  seed *= uint(9);
+  seed = seed ^ (seed >> 4);
+  seed *= uint(0x27d4eb2d);
+  seed = seed ^ (seed >> 15);
+  return seed;
 }
  
-float RandomFloat01(inout uint state)
-{
+float RandomFloat01(inout uint state) {
     return float(wang_hash(state)) / 4294967296.0;
 }
  
-vec3 RandomUnitVector(inout uint state)
-{
-    float z = RandomFloat01(state) * 2.0f - 1.0f;
-    float a = RandomFloat01(state) * c_twopi;
-    float r = sqrt(1.0f - z * z);
-    float x = r * cos(a);
-    float y = r * sin(a);
-    return vec3(x, y, z);
+vec3 RandomUnitVector(inout uint state) {
+  float z = RandomFloat01(state) * 2.0f - 1.0f;
+  float a = RandomFloat01(state) * 3.14159 * 2.0f;
+  float r = sqrt(1.0f - z * z);
+  float x = r * cos(a);
+  float y = r * sin(a);
+  return vec3(x, y, z);
 }
 
 void main() {
-  vec2 coord = ivec2(gl_FragCoord.xy);
-	vec3 hitPos = texelFetch(hitPosTex, coord, 0).xyz;
-	if (hitPos == vec3(0,0,0)) discard;
-	float cellSize = texelFetch(depthTex, coord, 0).y;
-	vec3 hitNorm = texelFetch(hitNormTex, coord, 0).xyz;
+  // Path tracing based on https://blog.demofox.org/2020/05/25/casual-shadertoy-path-tracing-1-basic-camera-diffuse-emissive/
+
+  // vec2 coord = ivec2(gl_FragCoord.xy);
+	// vec3 hitPos = texelFetch(hitPosTex, coord, 0).xyz;
+	// if (hitPos == vec3(0,0,0)) discard;
+	// float cellSize = texelFetch(depthTex, coord, 0).y;
+	// vec3 hitNorm = texelFetch(hitNormTex, coord, 0).xyz;
 	// hitPos += hitNorm * 1e-3; // add epsilon, not sure why yet?
 
-	Ray r;
-	r.o = hitPos;
 
-
-  // Path tracing based on https://blog.demofox.org/2020/05/25/casual-shadertoy-path-tracing-1-basic-camera-diffuse-emissive/
   // initialize a random number state based on frag coord and frame
-  uint rngState = uint(uint(fragCoord.x) * uint(1973) + uint(fragCoord.y) * uint(9277) + uint(iFrame) * uint(26699)) | uint(1);
+  uint rngState = uint(uint(gl_FragCoord.x) * uint(1973) + uint(gl_FragCoord.y) * uint(9277) + uint(ptFrame) * uint(26699)) | uint(1);
 
+  vec2 screenCoords = (gl_FragCoord.xy / resolution) * 2.0 - 1.0;
 
+  Ray r = computeCameraRay(screenCoords);
+  float epsilon = 1E-3f;
+  vec2 t_min_max = vec2(useBeamOptimization ? 0.95 * getMinT(8) : 0., 1e30f);
 
+  vec3 hitNorm;
+  vec4 result = t_min_max.x > 1e25
+    ? vec4(-4)
+    : trace_ray(r, t_min_max, projectionFactor, hitNorm);
 
+  // Sample the scene by bouncing a ray around through for this pixel
+  vec3 color = vec3(0.0f, 0.0f, 0.0f);
+  
+  const int nBounces = 4;           // how many rays to bounce around per pixel 
+  const vec3 albedo = vec3(0.8);    // color of voxel material
+  vec3 throughput = vec3(1); // 
 
+  vec3 hitPos = r.o + result.x * r.d;
 
+	r.o = hitPos;
+  r.d = normalize(hitNorm + RandomUnitVector(rngState));
+
+  t_min_max.x = 0.;
+
+  for (int i = 0; i < nBounces; i++) {
+    stack_size = 0u; // might need to reset the stack. Shouldn't be needed though, as ray starts where previous ends (?)
+	  result = trace_ray(r, t_min_max, projectionFactor, hitNorm);
+
+    if (result.x < 0.) { // no hit: For now, background is pure white light, could use ray dir as light color
+      color += vec3(0.8) * throughput; 
+      break;
+    }
+
+    // Next ray to bounce around starts at the hit position of the previous ray
+    r.o = r.o + result.x * r.d;
+    // And points into random direction relative to the hit normal
+    r.d = normalize(hitNorm + RandomUnitVector(rngState));
+
+    // add emissive lighting to color
+    color += 0.05 * throughput; // (everything is a little emissive just to test)
+
+    // color of light carried by ray is affected by the material it hits
+    throughput *= albedo;
+  }
+
+  // average the frames together
+  // vec3 lastFrameColor = texelFetch(screenFBO, coord).rgb;
+  // color = mix(lastFrameColor, color, 1.0f / float(ptFrame+1));
+
+  fragColor = vec4(color, 1);
+
+#if 0 // SSAO code
   // Sampling based on Screen space AO from https://lingtorp.com/2019/01/18/Screen-Space-Ambient-Occlusion.html
 
   // Random vector to orient the hemisphere
@@ -640,6 +691,7 @@ void main() {
 	}
 	float visibility = (numAORays>0) ? 1.0 - (k/float(numAORays)) : 1.0;
 	output_t = visibility * visibility;
+#endif
 }
 
 #endif

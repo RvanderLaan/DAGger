@@ -39,9 +39,9 @@ function setDrawLevel(num: number) {
 }
 win.setDrawLevel = setDrawLevel.bind(this);
 
-function setRenderMode(num: RenderMode) {
+function setRenderMode(num: RenderMode | string) {
   console.log('setting render mode', num)
-  renderer.state.renderMode = num;
+  renderer.state.renderMode = typeof num === 'string' ? parseInt(num, 10) : num;
   (document.getElementById('renderMode') as HTMLInputElement).value = `${renderer.state.renderMode}`;
 }
 win.setRenderMode = setRenderMode.bind(this);

@@ -31,6 +31,7 @@ export async function loadRaycastFragShader(gl: WebGL2RenderingContext, nLevels:
 #define TEX3D_SIZE_POW2 ${maxT3DTexelsPow2}
 #define VIEWER_MODE ${mode === 'viewer' ? 1 : 0}
 #define DEPTH_MODE ${mode === 'depth' ? 1 : 0}
+#define PATH_TRACE_MODE ${mode === 'pathtracing' ? 1 : 0}
 `;
 
   // Replace the first few lines from shaderSrc with defines
