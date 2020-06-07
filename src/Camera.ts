@@ -12,8 +12,8 @@ class Camera {
   projMat: mat4 = mat4.create();
   projMatInv: mat4 = mat4.create();
 
-  constructor() {
-    this.fovY = 60.0 * 3.14159265359 / 180.0;
+  constructor(fov = 60) {
+    this.fovY = fov * 3.14159265359 / 180.0;
     vec3.set(this.upDir, 0, 1, 0); // y-up by default
   }
 

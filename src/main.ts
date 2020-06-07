@@ -13,7 +13,7 @@ let scene: SVDAG;
 
 const sceneList: SceneOption[] = [];
 
-const camera = new Camera();
+const camera = new Camera(60);
 let renderer: Renderer;
 
 const win = window as any;
@@ -26,7 +26,7 @@ let lastFrameTime = Date.now();
 let haveSettingsChanged = false; // flag to restart path tracing when settings change
 
 const params = ['renderScale', 'drawLevel', 'renderMode', 'moveSpeed', 'maxIterations', 'pixelTolerance',
-                'showUniqueNodeColors', 'useBeamOptimization']
+                'showUniqueNodeColors', 'useBeamOptimization'];
 
 // UI handlers
 function setRenderScale(num: number) {
@@ -247,7 +247,9 @@ async function loadSelectedScene() {
       camera.position.set(scene.bboxEnd);
     }
     camera.target.set(scene.bboxCenter);
-    setMoveSpeed(vec3.distance(scene.bboxStart, scene.bboxEnd) * 0.01);
+    if (!scene.renderPreferences.moveSpeed) {
+      setMoveSpeed(vec3.distance(scene.bboxStart, scene.bboxEnd) * 0.01);
+    }
   }
   camera.updateMatrices();
   controller.init();
