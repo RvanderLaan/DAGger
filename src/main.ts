@@ -1,7 +1,7 @@
 import { SVDAG } from "./SVDAG";
 import { vec3 } from "gl-matrix";
 import Camera from "./Camera";
-import Renderer, { RenderMode } from "./Renderer";
+import Renderer, { RenderMode, MAX_PATH_TRACE_SAMPLES } from "./Renderer";
 import OrbitController from "./OrbitController";
 import SceneProvider, { SceneOption } from "./SceneProvider";
 
@@ -296,7 +296,7 @@ function render() {
     renderer.state.pathTraceFrame = 0; // restart path tracing if scene changed, since previous frames are used which are invalidated when an update occurs
   }
   if (renderer.state.renderMode === RenderMode.PATH_TRACING) {
-    progressBar.style.width = `${100 * renderer.state.pathTraceFrame / 256}%`;
+    progressBar.style.width = `${100 * renderer.state.pathTraceFrame / MAX_PATH_TRACE_SAMPLES}%`;
   } else {
     progressBar.style.width = '0%';
   }

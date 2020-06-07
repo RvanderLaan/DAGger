@@ -107,9 +107,10 @@ export default class SceneProvider {
 
   static generateCubeFractal(svdag: SVDAG): SVDAG {
     svdag.renderPreferences = {
-      renderMode: RenderMode.DIFFUSE_LIGHTING,
+      renderMode: RenderMode.PATH_TRACING,
       maxIterations: 30,
       spawnPosition: vec3.fromValues(150, 150, 150),
+      moveSpeed: 16,
     };
 
     // A cube fractal is a bit more complex, we need more than 1 node

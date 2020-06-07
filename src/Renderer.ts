@@ -42,6 +42,8 @@ export enum RenderMode {
   NORMAL = 4,
 }
 
+export const MAX_PATH_TRACE_SAMPLES = 64;
+
 export interface IRendererState {
   renderMode: RenderMode;
   startTime: number;
@@ -110,7 +112,7 @@ export default class Renderer {
     renderMode: RenderMode.NORMAL,
     useBeamOptimization: true,
     showUniqueNodeColors: false,
-    nPathTraceBounces: 64,
+    nPathTraceBounces: 1,
   };
 
   constructor(
@@ -236,7 +238,7 @@ export default class Renderer {
     }
 
     if (state.renderMode === RenderMode.PATH_TRACING) {
-      if (state.pathTraceFrame > 256) return; // more than 256 samples doesn't improve the image
+      if (state.pathTraceFrame > MAX_PATH_TRACE_SAMPLES) return; // more than 256 samples doesn't improve the image
 
       // Swap the front and back buffer, and bind the correct frame buffer
       gl.useProgram(this.pathTraceProgram);
