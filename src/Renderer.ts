@@ -1,6 +1,6 @@
 import Camera from './Camera';
 import { SVDAG } from './SVDAG'
-import { loadProgram, loadVertShader, loadRaycastFragShader, loadNormalFragShader } from './ShaderUtils';
+import { loadProgram, loadVertShader, loadRaycastFragShader, loadNormalFragShader, loadTextureFragShader } from './ShaderUtils';
 import { mat4 } from 'gl-matrix';
 
 // Coupled to the glsl shader
@@ -15,12 +15,15 @@ const UNIFORMS = [
   'lightPos', 'enableShadows', 'normalEpsilon',
   'minDepthTex', 'useBeamOptimization',
   'depthTex', 'hitNormTex',
-  'ptFrame', 'screenTex'
+  'ptFrame', 'prevFrameTex', 'nPathTraceBounces'
 ] as const;
 type Uniform = typeof UNIFORMS[number];
 
 const NORMAL_UNIFORMS = ['depthTex', 'viewProjMatInv'] as const;
 type NormalUniform = typeof NORMAL_UNIFORMS[number];
+
+const TEX_UNIFORMS = ['tex'] as const;
+type TexUniform = typeof TEX_UNIFORMS[number];
 
 // Dict of uniform name to its ID
 type UniformDict<U extends string> = {
@@ -29,6 +32,7 @@ type UniformDict<U extends string> = {
 
 type ViewUniformDict = UniformDict<Uniform>;
 type NormalUniformDict = UniformDict<NormalUniform>;
+type TexUniformDict = UniformDict<TexUniform>;
 
 export enum RenderMode {
   ITERATIONS = 0,
@@ -37,35 +41,6 @@ export enum RenderMode {
   PATH_TRACING = 3,
   NORMAL = 4,
 }
-
-/**
- * Path tracing todo:
- * - Separate shader define for path tracing
- * - Set up full depth framebuffer with normals (maybe screen space normals in second pass?)
- * - Generate random sample
- * - Reset screen frame buffer when camera transformation changes
- * 
- * Pseudocode:
- * renderPathTrace() {
- *  if (cameraOrientationChanged) {
- * 
- *    renderMinDepthTex();
- *    
- *    bindOffscreenFrameBuffer   
- * 
- *    clearDefaultFB();
- * 
- *    renderPrimary(); // full depth tex
- * 
- *    // render normals to texture based on screen space depth - basically dX and dY gradient (needs clipped tex coords)
- *    // Improvement: https://wickedengine.net/2019/09/22/improved-normal-reconstruction-from-depth/
- *    screenSpaceNormals(); 
- * 
- *  } else {
- *    renderPathTrace();
- *  }
- * }
- */
 
 export interface IRendererState {
   renderMode: RenderMode;
@@ -79,6 +54,7 @@ export interface IRendererState {
   maxIterations: number;
   useBeamOptimization: boolean;
   showUniqueNodeColors: boolean;
+  nPathTraceBounces: number;
 }
 
 export default class Renderer {
@@ -98,6 +74,9 @@ export default class Renderer {
   normalProgram: WebGLProgram;
   normalUniformDict: NormalUniformDict;
 
+  texProgram: WebGLProgram; // render texture to screen (for path trace result)
+  texUniformDict: TexUniformDict;
+
   /** The 3D texture containing scene data */
   texture: WebGLTexture;
 
@@ -112,6 +91,13 @@ export default class Renderer {
   normalFBO: WebGLFramebuffer;
   normalTex: WebGLTexture;
 
+  // Two tex FBOs are needed for path tracing to average the color of one frame and the previous one
+  // since you cannot read and write to the same texture, they're swapped after every path trace render
+  ptFBO1: WebGLFramebuffer;
+  ptTex1: WebGLTexture;
+  ptFBO2: WebGLFramebuffer;
+  ptTex2: WebGLTexture;
+
   state: IRendererState = {
     startTime: new Date().getTime() / 1000,
     time: 0,
@@ -124,6 +110,7 @@ export default class Renderer {
     renderMode: RenderMode.NORMAL,
     useBeamOptimization: true,
     showUniqueNodeColors: false,
+    nPathTraceBounces: 64,
   };
 
   constructor(
@@ -146,13 +133,44 @@ export default class Renderer {
     [this.minDepthFBO, this.minDepthTex] = this.setupTexFBO(gl.TEXTURE1, { width: minDepthW, height: minDepthH });
     [this.fullDepthFBO, this.fullDepthTex] = this.setupTexFBO(gl.TEXTURE2);
     [this.normalFBO, this.normalTex] = this.setupTexFBO(gl.TEXTURE3, { internalFormat: gl.RGB8, format: gl.RGB, type: gl.UNSIGNED_BYTE });
+
+    [this.ptFBO1, this.ptTex1] = this.setupTexFBO(gl.TEXTURE4, { internalFormat: gl.RGBA32F, format: gl.RGBA, type: gl.FLOAT });
+    [this.ptFBO2, this.ptTex2] = this.setupTexFBO(gl.TEXTURE5, { internalFormat: gl.RGBA32F, format: gl.RGBA, type: gl.FLOAT });
+  }
+
+  /**
+   * Swaps the front and back buffers for path tracing
+   * @returns Which texture to render to the screen: [texture number, texture slot]
+   */
+  prepPathTraceRender() {
+    const { gl, state: { pathTraceFrame } } = this;
+    if (pathTraceFrame % 2 === 0) { // if frame number is even, read from buffer tex 2 and render to tex 1
+      gl.uniform1i(this.pathTraceUniformDict.prevFrameTex, 5);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, this.ptFBO1);
+
+      gl.activeTexture(gl.TEXTURE4);
+      gl.bindTexture(gl.TEXTURE_2D, null);
+      gl.activeTexture(gl.TEXTURE5);
+      gl.bindTexture(gl.TEXTURE_2D, this.ptTex2);
+      return { uniform: 4, slot: gl.TEXTURE4, texture: this.ptTex1 };
+    } else { // if frame number is even, read from buffer tex 1 and render to tex 2
+      gl.uniform1i(this.pathTraceUniformDict.prevFrameTex, 4);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, this.ptFBO2);
+
+      gl.activeTexture(gl.TEXTURE4);
+      gl.bindTexture(gl.TEXTURE_2D, this.ptTex1);
+      gl.activeTexture(gl.TEXTURE5);
+      gl.bindTexture(gl.TEXTURE_2D, null);
+      return { uniform: 5, slot: gl.TEXTURE5, texture: this.ptTex2 };
+    }
   }
 
   public render() {
-    const { gl, canvas, state, viewerUniformDict, depthUniformDict, normalUniformDict } = this;
+    const { gl, canvas, state, viewerUniformDict, depthUniformDict, normalUniformDict, texUniformDict } = this;
 
     // Pre-render low res depth pass
-    if (this.state.useBeamOptimization) {
+    if (this.state.useBeamOptimization &&
+      !(state.renderMode === RenderMode.PATH_TRACING && state.pathTraceFrame > 0)) { // no need for beam opt after first path trace frame
       // Min-depth pass
       gl.useProgram(this.depthProgram);
       gl.bindFramebuffer(gl.FRAMEBUFFER, this.minDepthFBO);
@@ -218,33 +236,64 @@ export default class Renderer {
     }
 
     if (state.renderMode === RenderMode.PATH_TRACING) {
-      if (state.pathTraceFrame === 0) {
-        // Initial render for path tracing: Render hitPosTex and hitNormTex for primary visibility rays
+      if (state.pathTraceFrame > 256) return; // more than 256 samples doesn't improve the image
 
-      } else {
-        // Subsequent frames render light bounces
+      // Swap the front and back buffer, and bind the correct frame buffer
+      gl.useProgram(this.pathTraceProgram);
+      const { uniform, slot, texture } = this.prepPathTraceRender();
 
-        // TODO: Since you cannot read and write to the same texture,
+      // if (state.pathTraceFrame === 0) {
+      //   // Initial render for path tracing:
+      //   // TODO: Render hitPosTex and hitNormTex for primary visibility rays
+
+      //   // Initial frame could just be diffuse lighting, to get the base colors in there and quick feedback when moving around
+      //   // Use the viewer program for rendering to the screen
+      //   gl.useProgram(this.viewerProgram);
+        
+      //   // TODO: Only update uniforms when they change, not all of them every time
+      //   this.setInitialUniforms(viewerUniformDict);
+        
+      //   gl.uniform1i(this.viewerUniformDict.viewerRenderMode, RenderMode.DIFFUSE_LIGHTING);
+
+      //   // Render 
+      //   gl.viewport(0, 0, canvas.width, canvas.height);
+      //   gl.clearColor(0, 0, 0, 1);
+      //   gl.clear(gl.COLOR_BUFFER_BIT);
+      //   gl.drawArrays(gl.TRIANGLES, 0, 3);
+      // } else {
+        // Subsequent frames render light bounces:
+
+        // Idea: Since you cannot read and write to the same texture,
         // two textures are needed and we need to swap between them every frame
         // and then render the latest one to the screen with ANOTHER full-screen quad shader
 
-
-        // TEMPORARY
-        // Reset frame buffer so we can render to the screen
-        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-        
         // Use the viewer program for rendering to the screen
         gl.useProgram(this.pathTraceProgram);
         
         // TODO: Only update uniforms when they change, not all of them every time
         this.setInitialUniforms(this.pathTraceUniformDict);
 
-        // Render 
+        // Render path trace program
         gl.viewport(0, 0, canvas.width, canvas.height);
         gl.clearColor(0, 0, 0, 1);
         gl.clear(gl.COLOR_BUFFER_BIT);
         gl.drawArrays(gl.TRIANGLES, 0, 3);
-      }
+      // }
+
+      // Render to screen as well:
+      // Reset frame buffer so we can render to the screen
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+
+      gl.activeTexture(slot);
+      gl.bindTexture(gl.TEXTURE_2D, texture);
+
+      gl.useProgram(this.texProgram);
+      gl.uniform1i(texUniformDict.tex, uniform);
+
+      gl.viewport(0, 0, canvas.width, canvas.height);
+      gl.clearColor(0, 0, 0, 1);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
 
       state.pathTraceFrame++;
       return; 
@@ -279,14 +328,16 @@ export default class Renderer {
     const depthFragShader = await loadRaycastFragShader(gl, svdag.nLevels, 'depth');
     const normalFragShader = await loadNormalFragShader(gl);
     const pathTraceFragShader = await loadRaycastFragShader(gl, svdag.nLevels, 'pathtracing');
+    const texFragShader = await loadTextureFragShader(gl);
 
     this.viewerProgram = await loadProgram(gl, vertShader, viewerFragShader);
     this.depthProgram = await loadProgram(gl, vertShader, depthFragShader);
     this.normalProgram = await loadProgram(gl, vertShader, normalFragShader);
+
     this.pathTraceProgram = await loadProgram(gl, vertShader, pathTraceFragShader);
+    this.texProgram = await loadProgram(gl, vertShader, texFragShader);
     
     gl.useProgram(this.viewerProgram);
-
   }
 
   /**
@@ -341,10 +392,12 @@ export default class Renderer {
     this.depthUniformDict = {} as any;
     this.normalUniformDict = {} as any;
     this.pathTraceUniformDict = {} as any;
+    this.texUniformDict = {} as any;
     UNIFORMS.forEach(u => this.viewerUniformDict[u] = gl.getUniformLocation(this.viewerProgram, u));
     UNIFORMS.forEach(u => this.depthUniformDict[u] = gl.getUniformLocation(this.depthProgram, u));
     NORMAL_UNIFORMS.forEach(u => this.normalUniformDict[u] = gl.getUniformLocation(this.normalProgram, u));
     UNIFORMS.forEach(u => this.pathTraceUniformDict[u] = gl.getUniformLocation(this.pathTraceProgram, u));
+    TEX_UNIFORMS.forEach(u => this.texUniformDict[u] = gl.getUniformLocation(this.texProgram, u));
   }
 
   getProjectionFactor(pixelTolerance: number, screenDivisor: number) {
@@ -384,17 +437,18 @@ export default class Renderer {
     gl.uniform1f(ud.time, new Date().getTime() / 1000 - state.startTime);
     gl.uniform1ui(ud.ptFrame, state.pathTraceFrame);
 
+    gl.uniform1i(ud.nPathTraceBounces, state.nPathTraceBounces);
+
     gl.uniform1i(ud.useBeamOptimization, state.useBeamOptimization ? 1 : 0);
     gl.uniform1i(ud.minDepthTex, 1);
     gl.uniform1i(ud.depthTex, 2);
     gl.uniform1i(ud.hitNormTex, 3);
-    gl.uniform1i(ud.screenTex, 4);
   }
 
   setNormalUniforms(ud: NormalUniformDict) {
     const { gl, camera } = this;
     
-    gl.uniformMatrix4fv(ud.viewProjMatInv, false, mat4.invert(mat4.create(), mat4.mul(mat4.create(), camera.projMat, camera.viewMat)));
+    gl.uniformMatrix4fv(ud.viewProjMatInv, false, camera.projMatInv);
     gl.uniform1i(ud.depthTex, 2);
   }
 

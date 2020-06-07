@@ -38,7 +38,12 @@ export class OrbitController {
       vec3.sub(this.tmpDir, this.camera.target, this.camera.position));
   }
 
-  update(dt: number) {
+  /**
+   * 
+   * @param dt Delta time (milliseconds since previous frame)
+   * @returns Whether an update has occured (camera or scene changed)
+   */
+  update(dt: number): boolean {
     let updated = false;
 
     if (this.keyDownStatus['shift']) {
@@ -112,6 +117,7 @@ export class OrbitController {
       this.camera.updateMatrices();
     }
     this.prevMousePos.set(this.mousePos);
+    return updated;
   }
 
   moveInDirection(dir: vec3, speed: number) {

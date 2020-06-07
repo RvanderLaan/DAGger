@@ -23,6 +23,11 @@ let fpsCount = 0;
 let latestFps = 1;
 let lastFrameTime = Date.now();
 
+let haveSettingsChanged = false; // flag to restart path tracing when settings change
+
+const params = ['renderScale', 'drawLevel', 'renderMode', 'moveSpeed', 'maxIterations', 'pixelTolerance',
+                'showUniqueNodeColors', 'useBeamOptimization']
+
 // UI handlers
 function setRenderScale(num: number) {
   renderer.state.renderScale = num;
@@ -30,12 +35,14 @@ function setRenderScale(num: number) {
   canvas.height = window.innerHeight * renderer.state.renderScale;
   canvas.style.transform = `translate(-50%, -50%) scale(${1/renderer.state.renderScale})`;
   (document.getElementById('renderScale') as HTMLInputElement).value = `${renderer.state.renderScale}`;
+  haveSettingsChanged = true;
 }
 win.setRenderScale = setRenderScale.bind(this);
 
 function setDrawLevel(num: number) {
   renderer.state.drawLevel = Math.max(1, Math.min(num, MAX_DRAW_LEVEL));
   (document.getElementById('drawLevel') as HTMLInputElement).value = `${renderer.state.drawLevel}`;
+  haveSettingsChanged = true;
 }
 win.setDrawLevel = setDrawLevel.bind(this);
 
@@ -43,29 +50,34 @@ function setRenderMode(num: RenderMode | string) {
   console.log('setting render mode', num)
   renderer.state.renderMode = typeof num === 'string' ? parseInt(num, 10) : num;
   (document.getElementById('renderMode') as HTMLInputElement).value = `${renderer.state.renderMode}`;
+  haveSettingsChanged = true;
 }
 win.setRenderMode = setRenderMode.bind(this);
 
 function setMoveSpeed(num: number | string) {
   controller.moveSpeed = typeof num === 'number' ? num : parseFloat(num);
   (document.getElementById('moveSpeed') as HTMLInputElement).value = controller.moveSpeed.toFixed(1);
+  haveSettingsChanged = true;
 }
 win.setMoveSpeed = setMoveSpeed.bind(this);
 
 function setMaxIterations(num: number) {
   renderer.state.maxIterations = Math.max(1, Math.min(num, 1000));
   (document.getElementById('maxIterations') as HTMLInputElement).value = renderer.state.maxIterations.toFixed(0);
+  haveSettingsChanged = true;
 }
 win.setMaxIterations = setMaxIterations.bind(this);
 
 function setPixelTolerance(num: number | string) {
   renderer.state.pixelTolerance = typeof num === 'number' ? num : parseFloat(num);
   (document.getElementById('pixelTolerance') as HTMLInputElement).value = renderer.state.pixelTolerance.toFixed(2);
+  haveSettingsChanged = true;
 }
 win.setPixelTolerance = setPixelTolerance.bind(this);
 
 function setShowUniqueColors(val: boolean) {
   renderer.state.showUniqueNodeColors = val;
+  haveSettingsChanged = true;
 }
 win.setShowUniqueColors = setShowUniqueColors.bind(this);
 
@@ -77,8 +89,18 @@ function setUseBeamOptimization(val: boolean, disable?: boolean) {
     checkbox.checked = val;
     checkbox.disabled = true;
   }
+  haveSettingsChanged = true;
 }
 win.setUseBeamOptimization = setUseBeamOptimization.bind(this);
+
+function setNPathTraceBounces(num: number | string) {
+  renderer.state.nPathTraceBounces = Math.max(0, Math.min(parseInt(num.toString()), 100));
+  (document.getElementById('nPathTraceBounces') as HTMLInputElement).value = renderer.state.nPathTraceBounces.toString();
+  haveSettingsChanged = true;
+}
+win.setNPathTraceBounces = setNPathTraceBounces.bind(this);
+
+const progressBar: HTMLDivElement = document.querySelector('#progress');
 
 // SCENE LOADING
 /////////////////
@@ -267,7 +289,17 @@ function render() {
   // Process input
   const dt = 0.001 * (Date.now() - lastFrameTime);
   lastFrameTime = Date.now();
-  controller.update(dt);
+  const didUpdate = controller.update(dt);
+
+  if (didUpdate || haveSettingsChanged) {
+    haveSettingsChanged = false;
+    renderer.state.pathTraceFrame = 0; // restart path tracing if scene changed, since previous frames are used which are invalidated when an update occurs
+  }
+  if (renderer.state.renderMode === RenderMode.PATH_TRACING) {
+    progressBar.style.width = `${100 * renderer.state.pathTraceFrame / 256}%`;
+  } else {
+    progressBar.style.width = '0%';
+  }
 
   renderer.render();
 

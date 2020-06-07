@@ -1,12 +1,13 @@
 
+/** Simple vert shader that renders a full-screen triangle */
 export function loadVertShader(gl: WebGL2RenderingContext) {
-  // // https://www.saschawillems.de/blog/2016/08/13/vulkan-tutorial-on-rendering-a-fullscreen-quad-without-buffers/
+  // From: https://www.saschawillems.de/blog/2016/08/13/vulkan-tutorial-on-rendering-a-fullscreen-quad-without-buffers/
   const vertSrc = `#version 300 es
     uniform float time;
     void main(void) {
       vec2 outUV = vec2((gl_VertexID << 1) & 2, gl_VertexID & 2);
       outUV = outUV * 2.0f - 1.0f;
-      // gl_Position = vec4(outUV * (1.0 / time) + vec2(cos(time * time), sin(time * time)), 0.0f, 1.0f);
+      // gl_Position = vec4(outUV * (1.0 / time) + vec2(cos(time * time), sin(time * time)), 0.0f, 1.0f); // wiggly test
       gl_Position = vec4(outUV, 0.0f, 1.0f);
     }
   `;
@@ -17,6 +18,26 @@ export function loadVertShader(gl: WebGL2RenderingContext) {
   return vertShader;
 }
 
+/** Simple frag shader that renders a texture */
+export function loadTextureFragShader(gl: WebGL2RenderingContext) {
+  const shaderSrc = `#version 300 es
+    precision highp float;
+    out vec4 fragColor;
+    uniform sampler2D tex;
+
+    void main () {
+      vec3 color = texelFetch(tex, ivec2(gl_FragCoord.xy), 0).rgb;
+      fragColor = vec4(color, 1);
+    }
+  `;
+  const shader = gl.createShader(gl.FRAGMENT_SHADER);
+  gl.shaderSource(shader, shaderSrc);
+  gl.compileShader(shader);
+  console.log(`Texture shader: `, gl.getShaderInfoLog(shader) || 'OK');
+  return shader;
+}
+
+/** The main shader that does all of the complex ray tracing stuff, based on Alberto Jaspe Villanueva's SSVDAG renderer */
 export async function loadRaycastFragShader(gl: WebGL2RenderingContext, nLevels: number, mode: 'viewer' | 'depth' | 'pathtracing') {
   const maxT3DTexels = gl.getParameter(gl.MAX_3D_TEXTURE_SIZE);
   const maxT3DTexelsPow2 = maxT3DTexels * maxT3DTexels;
@@ -44,6 +65,7 @@ export async function loadRaycastFragShader(gl: WebGL2RenderingContext, nLevels:
   return shader;
 }
 
+/** A frag shader that generates screen-space normals from a depth texture. Still WIP */
 export async function loadNormalFragShader(gl: WebGL2RenderingContext) {
   const shaderSrcRes = await fetch('normalFromDepth.glsl');
   const shaderSrc = await shaderSrcRes.text();
