@@ -47,6 +47,7 @@ uniform sampler2D hitPosTex;    // this one does need 32 bit high accuracy
 
 uniform sampler2D prevFrameTex;
 uniform int nPathTraceBounces;
+uniform float depthOfField;
 
 // uniform uint levelOffsets[INNER_LEVELS];
 
@@ -613,12 +614,19 @@ void main() {
   // initialize a random number state based on frag coord and frame
   uint rngState = uint(uint(gl_FragCoord.x) * uint(1973) + uint(gl_FragCoord.y) * uint(9277) + uint(ptFrame) * uint(26699)) | uint(1);
 
-  vec2 screenCoords = (gl_FragCoord.xy / resolution) * 2.0 - 1.0;
+  // calculate subpixel camera jitter for anti aliasing
+  vec2 dirJitter = vec2(RandomFloat01(rngState), RandomFloat01(rngState)) - 0.5f;
+  // origin jitter for depth of field
+  vec3 origJitter = vec3(RandomFloat01(rngState), RandomFloat01(rngState), RandomFloat01(rngState)) - 0.5f;
 
-  // Initial ray: Shoot through this pixel. TODO: Add random jitter (for AA)
+  vec2 screenCoords = ((gl_FragCoord.xy + dirJitter) / resolution) * 2.0 - 1.0;
+
+  // Initial ray: Shoot through this pixel
   Ray r = computeCameraRay(screenCoords);
   float epsilon = 1E-3f;
   vec2 t_min_max = vec2(useBeamOptimization ? 0.95 * getMinT(8) : 0., 1e30f);
+
+  r.o += origJitter * depthOfField; // Depth of field: randomly move the camera origin for each sample
 
   vec3 hitNorm;
   vec4 result;
