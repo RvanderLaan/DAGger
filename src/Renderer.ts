@@ -15,7 +15,7 @@ const UNIFORMS = [
   'lightPos', 'enableShadows', 'normalEpsilon',
   'minDepthTex', 'useBeamOptimization',
   'depthTex', 'hitNormTex',
-  'ptFrame', 'prevFrameTex', 'nPathTraceBounces'
+  'ptFrame', 'prevFrameTex', 'nPathTraceBounces', 'depthOfField'
 ] as const;
 type Uniform = typeof UNIFORMS[number];
 
@@ -57,6 +57,7 @@ export interface IRendererState {
   useBeamOptimization: boolean;
   showUniqueNodeColors: boolean;
   nPathTraceBounces: number;
+  depthOfField: number;
 }
 
 export default class Renderer {
@@ -113,6 +114,7 @@ export default class Renderer {
     useBeamOptimization: true,
     showUniqueNodeColors: false,
     nPathTraceBounces: 1,
+    depthOfField: 0,
   };
 
   constructor(
@@ -440,6 +442,7 @@ export default class Renderer {
     gl.uniform1ui(ud.ptFrame, state.pathTraceFrame);
 
     gl.uniform1i(ud.nPathTraceBounces, state.nPathTraceBounces);
+    gl.uniform1f(ud.depthOfField, state.depthOfField);
 
     gl.uniform1i(ud.useBeamOptimization, state.useBeamOptimization ? 1 : 0);
     gl.uniform1i(ud.minDepthTex, 1);

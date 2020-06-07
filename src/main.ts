@@ -28,6 +28,12 @@ let haveSettingsChanged = false; // flag to restart path tracing when settings c
 const params = ['renderScale', 'drawLevel', 'renderMode', 'moveSpeed', 'maxIterations', 'pixelTolerance',
                 'showUniqueNodeColors', 'useBeamOptimization'];
 
+/**
+ * Todo: (path tracing)
+ * - Decrease bounces to and and render scale to 0.5 when interacting
+ * - Make voxels around mouse click emissive
+ */
+
 // UI handlers
 function setRenderScale(num: number) {
   renderer.state.renderScale = num;
@@ -99,6 +105,14 @@ function setNPathTraceBounces(num: number | string) {
   haveSettingsChanged = true;
 }
 win.setNPathTraceBounces = setNPathTraceBounces.bind(this);
+
+function setDepthOfField(num: number | string) {
+  console.log(num);
+  renderer.state.depthOfField = Math.max(0, Math.min(parseFloat(num.toString()), 100));
+  (document.getElementById('depthOfField') as HTMLInputElement).value = renderer.state.depthOfField.toString();
+  haveSettingsChanged = true;
+}
+win.setDepthOfField = setDepthOfField.bind(this);
 
 const progressBar: HTMLDivElement = document.querySelector('#progress');
 
