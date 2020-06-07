@@ -45,6 +45,9 @@ uniform sampler2D depthTex;     // is depth tex even needed when hitPosTex is av
 uniform sampler2D hitNormTex;      // this one does not need to be 32 bit float, always a unit vector
 uniform sampler2D hitPosTex;    // this one does need 32 bit high accuracy
 
+uniform sampler2D prevFrameTex;
+uniform int nPathTraceBounces;
+
 // uniform uint levelOffsets[INNER_LEVELS];
 
 ivec3 stack[MAX_STACK_DEPTH];
@@ -413,6 +416,14 @@ float getMinT(in int delta) {
 	return min(min(tl, tr), min(bl, br));
 }
 
+vec3 uniqueNodeColor(in int nodeIndex) {
+  return normalize(vec3(
+    nodeIndex % 100 + 1, // + 1 to avoid vec3(0)
+    (3 * nodeIndex) % 200,
+    (2 * nodeIndex) % 300
+  ) / vec3(100, 200, 300));
+}
+
 #if VIEWER_MODE
 void main(void) {
   // vec2 uv = (gl_FragCoord.xy - resolution * 0.5) / resolution.y;
@@ -508,13 +519,9 @@ void main(void) {
     }
 
     if (uniqueColors) {
-      vec3 randomColor = normalize(vec3(
-        nodeIndex % 100,
-        (3 * nodeIndex) % 200,
-        (2 * nodeIndex) % 300
-      ) / vec3(100, 200, 300));
-      // color *= randomColor;
-      color *= hitNorm;
+      vec3 randomColor = uniqueNodeColor(nodeIndex);
+      color *= randomColor;
+      // color *= hitNorm;
     }
   }
   else if (result.x >= -2. ) { // inside BBox, but no intersection
@@ -603,43 +610,35 @@ void main() {
 	// vec3 hitNorm = texelFetch(hitNormTex, coord, 0).xyz;
 	// hitPos += hitNorm * 1e-3; // add epsilon, not sure why yet?
 
-
   // initialize a random number state based on frag coord and frame
   uint rngState = uint(uint(gl_FragCoord.x) * uint(1973) + uint(gl_FragCoord.y) * uint(9277) + uint(ptFrame) * uint(26699)) | uint(1);
 
   vec2 screenCoords = (gl_FragCoord.xy / resolution) * 2.0 - 1.0;
 
+  // Initial ray: Shoot through this pixel. TODO: Add random jitter (for AA)
   Ray r = computeCameraRay(screenCoords);
   float epsilon = 1E-3f;
   vec2 t_min_max = vec2(useBeamOptimization ? 0.95 * getMinT(8) : 0., 1e30f);
 
   vec3 hitNorm;
-  vec4 result = t_min_max.x > 1e25
-    ? vec4(-4)
-    : trace_ray(r, t_min_max, projectionFactor, hitNorm);
+  vec4 result;
+  vec3 albedo;
+  int nodeIndex;
 
-  // Sample the scene by bouncing a ray around through for this pixel
-  vec3 color = vec3(0.0f, 0.0f, 0.0f);
-  
-  const int nBounces = 4;           // how many rays to bounce around per pixel 
-  const vec3 albedo = vec3(0.8);    // color of voxel material
-  vec3 throughput = vec3(1); // 
+  vec3 color = vec3(0);
+  vec3 throughput = vec3(1);
 
-  vec3 hitPos = r.o + result.x * r.d;
-
-	r.o = hitPos;
-  r.d = normalize(hitNorm + RandomUnitVector(rngState));
-
-  t_min_max.x = 1e-3f;
-
-  for (int i = 0; i < nBounces; i++) {
-    stack_size = 0u; // might need to reset the stack. Shouldn't be needed though, as ray starts where previous ends (?)
+  for (int i = 0; i < nPathTraceBounces + 1; i++) {
+    // stack_size = 0u; // might need to reset the stack. Shouldn't be needed though, as ray starts where previous ends (?)
 	  result = trace_ray(r, t_min_max, projectionFactor, hitNorm);
 
-    if (result.x < 0.) { // no hit: For now, background is pure white light, could use ray dir as light color
+    if (result.x < 0.) { // no hit: For now, background is pure white light, could use environment map or procedurally generated sky
       color += vec3(0.8) * throughput; 
       break;
     }
+
+    nodeIndex = int(result.w);
+    albedo = uniqueColors ? uniqueNodeColor(nodeIndex) : vec3(0.8);
 
     // Next ray to bounce around starts at the hit position of the previous ray
     r.o = r.o + result.x * r.d;
@@ -647,15 +646,18 @@ void main() {
     r.d = normalize(hitNorm + RandomUnitVector(rngState));
 
     // add emissive lighting to color
-    color += 0.05 * throughput; // (everything is a little emissive just to test)
+    // color += 0.00 * throughput; // (material emissiveness, e.g. could make all green nodes emissive for fun)
 
     // color of light carried by ray is affected by the material it hits
     throughput *= albedo;
+
+    // Prepare next ray
+    t_min_max.x = epsilon;
   }
 
   // average the frames together
-  // vec3 lastFrameColor = texelFetch(screenFBO, coord).rgb;
-  // color = mix(lastFrameColor, color, 1.0f / float(ptFrame+1));
+  vec3 lastFrameColor = texelFetch(prevFrameTex, ivec2(gl_FragCoord.xy), 0).rgb;
+  color = mix(lastFrameColor, color, 1.0f / float(ptFrame + 1u));
 
   fragColor = vec4(color, 1);
 
