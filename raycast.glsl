@@ -636,12 +636,17 @@ void main() {
   vec3 color = vec3(0);
   vec3 throughput = vec3(1);
 
+  float nBounces = 0.;
+
   for (int i = 0; i < nPathTraceBounces + 1; i++) {
+    nBounces += 1.;
+
     // stack_size = 0u; // might need to reset the stack. Shouldn't be needed though, as ray starts where previous ends (?)
 	  result = trace_ray(r, t_min_max, projectionFactor, hitNorm);
 
     if (result.x < 0.) { // no hit: For now, background is pure white light, could use environment map or procedurally generated sky
-      color += vec3(0.8) * throughput; 
+      color += vec3(0.8) * throughput;  // constant white color
+      // color += r.d * throughput;  // ray direction as color
       break;
     }
 
@@ -654,18 +659,38 @@ void main() {
     r.d = normalize(hitNorm + RandomUnitVector(rngState));
 
     // add emissive lighting to color
-    // color += 0.00 * throughput; // (material emissiveness, e.g. could make all green nodes emissive for fun)
+    // float emissionFreq =  32. * 2. * 3.14159 / rootHalfSide;
+    // float emissiveness = abs((r.o.x - 50.)) < 0.1 ? 20. : 0.; 
+    // color += emissiveness * r.d * throughput; // (material emissiveness, e.g. could make all green nodes emissive for fun)
 
     // color of light carried by ray is affected by the material it hits
     throughput *= albedo;
+
+    // Russian Roulette
+    // As the throughput gets smaller, the ray is more likely to get terminated early.
+    // Survivors have their value boosted to make up for fewer samples being in the average.
+    {
+        float p = max(throughput.r, max(throughput.g, throughput.b));
+        if (RandomFloat01(rngState) > p)
+            break;
+    
+        // Add the energy we 'lose' by randomly terminating paths
+        throughput *= 1.0f / p;
+    }
 
     // Prepare next ray
     t_min_max.x = epsilon;
   }
 
+#if 0 // DEBUG to see how many bounces are performed per pixel
+  color.gb = vec2(nBounces) / vec2(nPathTraceBounces); // / 100.
+#endif
+
   // average the frames together
   vec3 lastFrameColor = texelFetch(prevFrameTex, ivec2(gl_FragCoord.xy), 0).rgb;
   color = mix(lastFrameColor, color, 1.0f / float(ptFrame + 1u));
+
+
 
   fragColor = vec4(color, 1);
 
