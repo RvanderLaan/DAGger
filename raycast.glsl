@@ -344,7 +344,10 @@ vec4 trace_ray(in Ray r, in vec2 t_min_max, const in float projection_factor, ou
 
   float i = 0.;
 
-  ivec3 stepDir = ivec3(0);
+  // DDA step direction - used to determine surface normal
+  // initialized as the side the ray is coming from, for voxels on the outer border of the scene
+  vec3 initRO = r.o + (t_min_max.x - 1e-3) * r.d; 
+  ivec3 stepDir = ivec3(lessThan(initRO, vec3(0))) + -ivec3(greaterThan(initRO, vec3(1))); 
   
   uint iteration_count = 0u;
   uint max_level = min(INNER_LEVELS, drawLevel-1u);
@@ -689,8 +692,6 @@ void main() {
   // average the frames together
   vec3 lastFrameColor = texelFetch(prevFrameTex, ivec2(gl_FragCoord.xy), 0).rgb;
   color = mix(lastFrameColor, color, 1.0f / float(ptFrame + 1u));
-
-
 
   fragColor = vec4(color, 1);
 
