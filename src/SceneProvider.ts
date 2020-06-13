@@ -26,6 +26,16 @@ export default class SceneProvider {
   static async getGeneratedSceneList() {
     const generatedSceneOptions: SceneOption[] = [
       {
+        label: 'Cross fractal',
+        getScene: async (svdag) => SceneProvider.generateCrossFractal(svdag),
+        loadType: 'preloaded',
+      },
+      {
+        label: 'Menger sponge fractal',
+        getScene: async (svdag) => SceneProvider.generateMengerSpongeFractal(svdag),
+        loadType: 'preloaded',
+      },
+      {
         label: 'Cube fractal',
         getScene: async (svdag) => SceneProvider.generateCubeFractal(svdag),
         loadType: 'preloaded',
@@ -129,5 +139,81 @@ export default class SceneProvider {
         0b01111111,
         0, 0, 0, 0, 0, 0, 0
     ]));
+  }
+
+  static generateCrossFractal(svdag: SVDAG): SVDAG {
+    svdag.renderPreferences = {
+      renderMode: RenderMode.PATH_TRACING,
+      maxIterations: 30,
+      spawnPosition: vec3.fromValues(150, 150, 150),
+      moveSpeed: 16,
+    };
+
+    // Cross fractal: Similar to cube fractal, but root has 8 rotated variants of its child node
+
+    return SceneProvider.generateBaseFractal(
+      svdag,
+      9,
+      new Uint32Array([
+        // root node: all child pointers set
+        0b11111111,
+        // 8 pointers, all pointing to a unique node (each of size 5)
+        ...Array.from(Array(8).keys()).map((i: number) => (9 + i * 8)),
+        // 8 nodes, each with 7 pointers that point to the root node
+        0b01111111,
+        0, 0, 0, 0, 0, 0, 0,
+        0b10111111,
+        0, 0, 0, 0, 0, 0, 0,
+        0b11011111,
+        0, 0, 0, 0, 0, 0, 0,
+        0b11101111,
+        0, 0, 0, 0, 0, 0, 0,
+        0b11110111,
+        0, 0, 0, 0, 0, 0, 0,
+        0b11111011,
+        0, 0, 0, 0, 0, 0, 0,
+        0b11111101,
+        0, 0, 0, 0, 0, 0, 0,
+        0b11111110,
+        0, 0, 0, 0, 0, 0, 0,
+    ]));
+  }
+
+  static generateMengerSpongeFractal(svdag: SVDAG): SVDAG {
+    svdag.renderPreferences = {
+      renderMode: RenderMode.PATH_TRACING,
+      maxIterations: 30,
+      spawnPosition: vec3.fromValues(150, 150, 150),
+      moveSpeed: 16,
+    };
+    // Menger sponge: A 4^3 cube with a hole on each face
+    // (the real menger sponge is of 3^3 but can't really do that here, since each octree node is of size 2^3)
+
+    return SceneProvider.generateBaseFractal(
+      svdag,
+      5,
+      new Uint32Array([
+        // root node: all child pointers set
+        0b11111111,
+        // 8 pointers, all pointing to a unique node (each of size 5)
+        ...Array.from(Array(8).keys()).map((i: number) => (9 + i * 5)),
+        // 8 nodes, each with 7 pointers that point to the root node
+        0b11101000,
+        0, 0, 0, 0,
+        0b11010100,
+        0, 0, 0, 0,
+        0b10110010,
+        0, 0, 0, 0,
+        0b01110001,
+        0, 0, 0, 0,
+        0b10001110,
+        0, 0, 0, 0,
+        0b01001101,
+        0, 0, 0, 0,
+        0b00101011,
+        0, 0, 0, 0,
+        0b00010111,
+        0, 0, 0, 0,
+      ]));
   }
 }

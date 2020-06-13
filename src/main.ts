@@ -5,6 +5,8 @@ import Renderer, { RenderMode, MAX_PATH_TRACE_SAMPLES } from "./Renderer";
 import OrbitController from "./OrbitController";
 import SceneProvider, { SceneOption } from "./SceneProvider";
 
+export const GL = WebGL2RenderingContext;
+
 const MAX_DRAW_LEVEL = 20;
 
 let canvas: HTMLCanvasElement;

@@ -1,7 +1,7 @@
 import Camera from './Camera';
 import { SVDAG } from './SVDAG'
 import { loadProgram, loadVertShader, loadRaycastFragShader, loadNormalFragShader, loadTextureFragShader } from './ShaderUtils';
-import { mat4 } from 'gl-matrix';
+import { mat4, vec3 } from 'gl-matrix';
 
 // Coupled to the glsl shader
 const UNIFORMS = [
@@ -58,6 +58,8 @@ export interface IRendererState {
   showUniqueNodeColors: boolean;
   nPathTraceBounces: number;
   depthOfField: number;
+  selectedVoxelIndex: number;
+  lightPos: vec3;
 }
 
 export default class Renderer {
@@ -115,6 +117,8 @@ export default class Renderer {
     showUniqueNodeColors: false,
     nPathTraceBounces: 1,
     depthOfField: 0,
+    selectedVoxelIndex: -1,
+    lightPos: vec3.create(),
   };
 
   constructor(
@@ -323,6 +327,7 @@ export default class Renderer {
 
   initScene(svdag: SVDAG) {
     this.svdag = svdag;
+    this.state.lightPos.set(svdag.bboxEnd);
   }
 
   async initShaders() {
@@ -332,14 +337,14 @@ export default class Renderer {
     const depthFragShader = await loadRaycastFragShader(gl, svdag.nLevels, 'depth');
     const normalFragShader = await loadNormalFragShader(gl);
     const pathTraceFragShader = await loadRaycastFragShader(gl, svdag.nLevels, 'pathtracing');
-    const texFragShader = await loadTextureFragShader(gl);
+    const texFragShader = loadTextureFragShader(gl);
 
-    this.viewerProgram = await loadProgram(gl, vertShader, viewerFragShader);
-    this.depthProgram = await loadProgram(gl, vertShader, depthFragShader);
-    this.normalProgram = await loadProgram(gl, vertShader, normalFragShader);
+    this.viewerProgram = loadProgram(gl, vertShader, viewerFragShader);
+    this.depthProgram = loadProgram(gl, vertShader, depthFragShader);
+    this.normalProgram = loadProgram(gl, vertShader, normalFragShader);
 
-    this.pathTraceProgram = await loadProgram(gl, vertShader, pathTraceFragShader);
-    this.texProgram = await loadProgram(gl, vertShader, texFragShader);
+    this.pathTraceProgram = loadProgram(gl, vertShader, pathTraceFragShader);
+    this.texProgram = loadProgram(gl, vertShader, texFragShader);
     
     gl.useProgram(this.viewerProgram);
   }

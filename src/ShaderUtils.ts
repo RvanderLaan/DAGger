@@ -76,7 +76,7 @@ export async function loadNormalFragShader(gl: WebGL2RenderingContext) {
   return shader;
 }
 
-export async function loadProgram(gl: WebGL2RenderingContext, vertShader: WebGLShader, fragShader: WebGLShader) {
+export function loadProgram(gl: WebGL2RenderingContext, vertShader: WebGLShader, fragShader: WebGLShader) {
 
   // Proper error is printed when we don't check for errors
   // (Disabled since the error is less obvious than the built-in error message for some reason)

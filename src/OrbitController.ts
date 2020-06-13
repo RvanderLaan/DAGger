@@ -1,5 +1,6 @@
 import { vec3, mat4, vec2, glMatrix } from "gl-matrix";
 import Camera from "./Camera";
+import { SVDAG } from "./SVDAG";
 
 interface IKeyDownStatus {
   [key: string]: boolean;
@@ -21,6 +22,7 @@ export class OrbitController {
   constructor(
     public camera: Camera,
     public moveSpeed: number,
+    // public scene: SVDAG,
   ) {
     this.keyDownStatus = {};
     this.radius = vec3.dist(this.camera.position, this.camera.target);
@@ -36,6 +38,11 @@ export class OrbitController {
     vec3.normalize(
       this.tmpDir, 
       vec3.sub(this.tmpDir, this.camera.target, this.camera.position));
+  }
+
+  handleClick(pos: Readonly<vec2>) {
+    const forward = vec3.subtract(vec3.create(), this.camera.target, this.camera.position);
+    // this.scene.castRay(this.camera.position, forward)
   }
 
   /**
@@ -145,7 +152,7 @@ export class OrbitController {
   }
 
   rotateAroundPivot(dir: vec2) {
-    
+
   }
 
   onKeyDown(e: KeyboardEvent) {
@@ -160,6 +167,8 @@ export class OrbitController {
     this.keyDownStatus[`mouse-${e.button}`] = true;
     this.prevMousePos.set([e.clientX, e.clientY]);
     this.mousePos.set(this.prevMousePos);
+
+    this.handleClick(this.mousePos);
   }
   onTouchStart(e: TouchEvent) {
     this.keyDownStatus[`mouse-0`] = true;
