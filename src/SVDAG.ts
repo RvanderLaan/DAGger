@@ -39,6 +39,8 @@ export class SVDAG extends EncodedOctree {
 
     // Nodes
     this.nodes.set(new Uint32Array(buffer.slice(i)));
+
+    return this;
   }
 
   parseHeader(buffer: ArrayBuffer) {
@@ -62,9 +64,21 @@ export class SVDAG extends EncodedOctree {
 
     this.nodes = new Uint32Array(nodeBufLength);
 
+    // Fix for some scenes I built personally with a too big BBOX
+    const maxBboxSz = 25000;
+    if (vec3.len(this.bboxStart) === 0 && vec3.len(this.bboxEnd) > maxBboxSz) {
+      console.log('Correcting large bbox (scaling 20x down)');
+      vec3.div(this.bboxEnd, this.bboxEnd, vec3.fromValues(10, 10, 10));
+      vec3.sub(this.bboxStart, this.bboxStart, vec3.fromValues(0.1, 0.1, 0.1));
+      this.rootSide /= 10;
+      // vec3.sub(this.bboxEnd, this.bboxEnd, vec3.fromValues(maxBboxSz, maxBboxSz, maxBboxSz));
+    }
+
     // Utils
     vec3.sub(this.bboxCenter, this.bboxEnd, this.bboxStart);
     vec3.scaleAndAdd(this.bboxCenter, this.bboxStart, this.bboxCenter, 0.5);
+
+
 
     return i;
   }

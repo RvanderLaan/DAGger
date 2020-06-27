@@ -110,14 +110,16 @@ export class OrbitController {
     }
 
     if (this.keyDownStatus['mouse-0']) {
-      updated = true;
+      // Only update camera matrix if mouse moved
       const delta = vec2.subtract(vec2.create(), this.prevMousePos, this.mousePos);
-      vec2.divide(delta, delta, [document.documentElement.clientWidth, document.documentElement.clientHeight]);
-
-      const lookSpeed = 5;
-
-      this.rotateAlongLocalY(delta[0], lookSpeed);
-      this.rotateAlongLocalX(delta[1], -lookSpeed);
+      if (delta[0] !==  0 || delta[1] !== 0) {
+        updated = true;
+        vec2.divide(delta, delta, [document.documentElement.clientWidth, document.documentElement.clientHeight]);
+        const lookSpeed = 5;
+  
+        this.rotateAlongLocalY(delta[0], lookSpeed);
+        this.rotateAlongLocalX(delta[1], -lookSpeed);
+      }
     }
 
     if (updated) {

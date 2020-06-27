@@ -3,7 +3,7 @@ import { vec3 } from "gl-matrix";
 import Camera from "./Camera";
 import Renderer, { RenderMode, MAX_PATH_TRACE_SAMPLES } from "./Renderer";
 import OrbitController from "./OrbitController";
-import SceneProvider, { SceneOption } from "./SceneProvider";
+import SceneProvider, { SceneOption, PreloadedSceneOption } from "./SceneProvider";
 
 export const GL = WebGL2RenderingContext;
 
@@ -192,6 +192,22 @@ async function loadSceneStream(downloadPath: string) {
 export async function loadScene(sceneOption: SceneOption) {
   console.log(`Loading "${sceneOption.label}" (${sceneOption.loadType})...`);
 
+  // Dispose current scene first
+  renderer.deleteNodesTexture();
+
+  // TODO: Should add a version number to the SVDAG file header
+  // TODO: In theory, you could only host the highest res, and just do a partial load 
+
+  // Need to recompile the frag shader, since it relies on #defines for the max # levels
+  // TODO: hacky fix: set the drawLevel to 20 for every scene 
+  // gl.detachShader(program, fragShader);
+  // gl.deleteShader(fragShader);
+  // fragShader
+
+  const oldBboxCenter = scene?.bboxCenter || vec3.create();
+
+  renderer.createNodesTexture();
+
   let svdag;
 
   if (sceneOption.loadType === 'stream') {
@@ -211,7 +227,7 @@ export async function loadScene(sceneOption: SceneOption) {
     // Option 3: Preloaded data (currently used for generated SVDAGs)
     svdag = new SVDAG();
     renderer.initScene(svdag);
-    sceneOption.getScene(svdag);
+    await sceneOption.getScene(svdag);
     svdag.originalNodeLength = svdag.nodes.length;
     svdag.dataLoadedOffset = svdag.nNodes * 4;
     svdag.initialized = true; // header should already be loaded for preloaded scenes
@@ -228,7 +244,22 @@ export async function loadScene(sceneOption: SceneOption) {
   console.log(`Levels: ${svdag.nLevels}, nodes: ${svdag.nNodes}`);
   console.log(`Bbox:\n\t[${svdag.bboxStart}]\n\t[${svdag.bboxEnd}]\n\t(center: [${svdag.bboxCenter}])`);
 
-  return svdag;
+  setDrawLevel(svdag.nLevels);
+
+  // If the bbox center is different, it's probably a new scene, so reset camera
+  if (vec3.dist(oldBboxCenter, svdag.bboxCenter) > 0.001 || svdag.renderPreferences.spawnPosition) {
+    if (!svdag.renderPreferences.spawnPosition) {
+      camera.position.set(svdag.bboxEnd);
+    }
+    camera.target.set(svdag.bboxCenter);
+    if (!svdag.renderPreferences.moveSpeed) {
+      setMoveSpeed(vec3.distance(svdag.bboxStart, svdag.bboxEnd) * 0.01);
+    }
+  }
+  camera.updateMatrices();
+  controller.init();
+
+  scene = svdag;
 }
 
 async function loadSelectedScene() {
@@ -237,40 +268,25 @@ async function loadSelectedScene() {
   const selector = document.getElementById('sceneSelector') as HTMLSelectElement;
   const selectedSceneIndex = parseInt(selector.options[selector.selectedIndex].value) || 0;
 
-  // Dispose current scene first
-  renderer.deleteNodesTexture();
-
-  // TODO: Should add a version number to the SVDAG file header
-  // TODO: In theory, you could only host the highest res, and just do a partial load 
-
-  // Need to recompile the frag shader, since it relies on #defines for the max # levels
-  // TODO: hacky fix: set the drawLevel to 20 for every scene 
-  // gl.detachShader(program, fragShader);
-  // gl.deleteShader(fragShader);
-  // fragShader
-
-  const oldBboxCenter = scene?.bboxCenter || vec3.create();
-
-  renderer.createNodesTexture();
   console.log(selectedSceneIndex, sceneList)
-  scene = await loadScene(sceneList[selectedSceneIndex]);
-
-  setDrawLevel(scene.nLevels);
-
-  // If the bbox center is different, it's probably a new scene, so reset camera
-  if (vec3.dist(oldBboxCenter, scene.bboxCenter) > 0.001 || scene.renderPreferences.spawnPosition) {
-    if (!scene.renderPreferences.spawnPosition) {
-      camera.position.set(scene.bboxEnd);
-    }
-    camera.target.set(scene.bboxCenter);
-    if (!scene.renderPreferences.moveSpeed) {
-      setMoveSpeed(vec3.distance(scene.bboxStart, scene.bboxEnd) * 0.01);
-    }
-  }
-  camera.updateMatrices();
-  controller.init();
+  await loadScene(sceneList[selectedSceneIndex]); 
 }
 win.loadSelectedScene = loadSelectedScene.bind(this);
+
+const fileInput: HTMLInputElement = document.querySelector('#file-input');
+fileInput.onchange = async (event) => {
+  const target = event.target as HTMLInputElement;
+  console.log(target, target.files, target.files?.length);
+  if (target.files && target.files.length) {
+    const file = target.files.item(0);
+    const sceneOption: PreloadedSceneOption = {
+      label: file.name,
+      getScene: async (svdag) => svdag.load(await file.arrayBuffer()),
+      loadType: 'preloaded',
+    };
+    await loadScene(sceneOption);
+  }
+};
 
 
 // Main render function - updates things every frame and calls the SVDAG renderer.render

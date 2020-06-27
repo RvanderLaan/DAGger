@@ -5,6 +5,7 @@
 This is a web version of the viewer application from my [SVDAG-Compression](https://github.com/RvanderLaan/SVDAG-Compression) repository, which originates from the source code released alongside the [SSVDAG paper](http://jcgt.org/published/0006/02/01/).
 
 <img alt="The cube fractal scene rendered in DAGger using path tracing" src="images/dagger-cube-fractal.png?raw=true" height="200" />
+<img alt="Epic Citadel at 32K^3 rendered using path tracing" src="images/epic-citadel-15.png?raw=true" height="200" />
 
 ## Goals
  - [x] Render Sparse Voxel DAG in the browser using WebGL.
@@ -18,6 +19,7 @@ This is a web version of the viewer application from my [SVDAG-Compression](http
  - [ ] Attribute encoding (colors)
  - [ ] Import 3D models (voxelize on the fly)
  - [ ] Scene modification
+ - [ ] Stream based on demand - only nodes that are visible or close to the camera (e.g. could separate scene into a root file and 64 "chunk" files)
  
 Running it locally:
 - Get NPM and Yarn installed
