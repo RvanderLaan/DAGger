@@ -648,8 +648,8 @@ void main() {
 	  result = trace_ray(r, t_min_max, projectionFactor, hitNorm);
 
     if (result.x < 0.) { // no hit: For now, background is pure white light, could use environment map or procedurally generated sky
-      color += vec3(0.8) * throughput;  // constant white color
-      // color += r.d * throughput;  // ray direction as color
+      // color += vec3(0.8) * throughput;  // constant white color
+      color += abs(r.d) * throughput;  // ray direction as color
       break;
     }
 

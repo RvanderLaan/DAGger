@@ -57,6 +57,9 @@
       width: 0%;
       background: rgb(0,200,128)
     }
+    #file-input {
+      display: none;
+    }
   </style>
 </header>
 <body>
@@ -85,6 +88,9 @@
       </select>
 
       <button id="load" onclick="loadSelectedScene()">Load</button>
+  
+      <input type="file" accept=".svdag" id="file-input" />
+      <button id="loadFromFile" onclick="document.querySelector('#file-input').click()">Choose file...</button>
 
       <br />
 
