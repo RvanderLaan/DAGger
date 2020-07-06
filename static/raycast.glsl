@@ -606,21 +606,26 @@ vec3 RandomUnitVector(inout uint state) {
 }
 
 vec3 reproject(in vec3 hitPos) {
+  // vec2 screenCoords = (gl_FragCoord.xy / resolution) * 2.0 - 1.0;
+
+  // TODO: Somethin weird going on - do we need to be in _world_ position, or within the bounds _relative_octree_ position (ray is moved in box in trace_ray)?
   // We have a world position
   vec4 wpos = vec4(hitPos, 1.);
   // That we convert to camera space (the coordinate system of the camera)
-  vec4 cpos = wpos * (projMatInv * prevViewMatInv );
+  vec4 cpos = wpos * (projMatInv * prevViewMatInv);
   // Then we can project the camera-space position on the camera plane
   vec2 npos = cpos.xy / cpos.z;
   // And this needs to be moved from [-1, 1] to [0, 1]
-  vec2 spos = 0.5 + 0.5*(npos * vec2(resolution.y / float(resolution.x), 1));
+  vec2 rpos = 1.0 + resolution * npos;
+  // vec2 spos = 0.5 + 0.5 * (npos * vec2(resolution.y / float(resolution.x), 1));
 	// And then to the lookup position (the pixel coordinate in the previous frame)
-  vec2 rpos = spos * resolution;
+  // vec2 rpos = spos * resolution;
   // look up color at this pixel of previous frame
   return texelFetch(prevFrameTex, ivec2(rpos), 0).rgb;
 
   // vec4 pixel_s0 = vec4(pixelScreenCoords.x, pixelScreenCoords.y, 0, 1);
   // vec4 pixel_s1 = vec4(pixelScreenCoords.x, pixelScreenCoords.y, 1, 1);
+
   // Assuming projection matrix doesn't change inbetween two frames
   // vec3 pixel_w0 = fromHomog(projMatInv * pixel_s0);
   // vec3 pixel_w1 = fromHomog(projMatInv * pixel_s1);
@@ -694,7 +699,7 @@ void main() {
     // And points into random direction relative to the hit normal
     r.d = normalize(hitNorm + RandomUnitVector(rngState));
 
-    // Store initial hit position
+    // Store initial hit position (which is the origin of the next bounce ray)
     if (i == 0) hitPos = r.o;
 
     // add emissive lighting to color
@@ -739,7 +744,7 @@ void main() {
   if (ptFrame > 0u) {
     // vec3 lastFrameColor = texelFetch(prevFrameTex, ivec2(gl_FragCoord.xy), 0).rgb; // pick same pixel as this frame
     vec3 lastFrameColor = reproject(hitPos); // re-project the pixel for the hit position we found in the last frame
-    color = mix(lastFrameColor, color, 0.06);
+    color = mix(lastFrameColor, color, 0.06); // todo: could weight earlier frames higher than late frames (when view updates)
   }
   fragColor = vec4(color, 1);
 
