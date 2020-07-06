@@ -1,3 +1,4 @@
-static/js/*
-static/examples/*
-node_modules/*
+static/js/
+static/examples/
+node_modules/
+dist/

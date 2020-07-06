@@ -6,7 +6,7 @@ import { mat4, vec3 } from 'gl-matrix';
 // Coupled to the glsl shader
 const UNIFORMS = [
   'time', 'resolution',
-  'viewMatInv', 'projMatInv',
+  'viewMatInv', 'projMatInv', 'prevViewMatInv',
   'sceneBBoxMin', 'sceneBBoxMax', 'sceneCenter', 'rootHalfSide',
   'maxIters', 'drawLevel', 'projectionFactor',
   'nodes',
@@ -49,7 +49,7 @@ export interface IRendererState {
   startTime: number;
   time: number;
   frame: number;
-  pathTraceFrame: number;
+  cameraUpdateFrame: number;
   pixelTolerance: number;
   renderScale: number;
   drawLevel: number;
@@ -107,7 +107,7 @@ export default class Renderer {
     startTime: new Date().getTime() / 1000,
     time: 0,
     frame: 0,
-    pathTraceFrame: 0,
+    cameraUpdateFrame: 0,
     pixelTolerance: 1,
     renderScale: 1,
     drawLevel: 1,
@@ -151,8 +151,8 @@ export default class Renderer {
    * @returns Which texture to render to the screen: [texture number, texture slot]
    */
   prepPathTraceRender() {
-    const { gl, state: { pathTraceFrame } } = this;
-    if (pathTraceFrame % 2 === 0) { // if frame number is even, read from buffer tex 2 and render to tex 1
+    const { gl, state: { frame } } = this;
+    if (frame % 2 === 0) { // if frame number is even, read from buffer tex 2 and render to tex 1
       gl.uniform1i(this.pathTraceUniformDict.prevFrameTex, 5);
       gl.bindFramebuffer(gl.FRAMEBUFFER, this.ptFBO1);
 
@@ -178,7 +178,7 @@ export default class Renderer {
 
     // Pre-render low res depth pass
     if (this.state.useBeamOptimization &&
-      !(state.renderMode === RenderMode.PATH_TRACING && state.pathTraceFrame > 0)) { // no need for beam opt after first path trace frame
+      !(state.renderMode === RenderMode.PATH_TRACING && state.frame > state.cameraUpdateFrame)) { // no need for beam opt after first path trace frame
       // Min-depth pass
       gl.useProgram(this.depthProgram);
       gl.bindFramebuffer(gl.FRAMEBUFFER, this.minDepthFBO);
@@ -243,8 +243,10 @@ export default class Renderer {
       gl.bindTexture(gl.TEXTURE_2D, this.normalTex);
     }
 
+    // console.log(state.frame, state.cameraUpdateFrame);
+
     if (state.renderMode === RenderMode.PATH_TRACING) {
-      if (state.pathTraceFrame > MAX_PATH_TRACE_SAMPLES) return; // more than 256 samples doesn't improve the image
+      if (state.frame > state.cameraUpdateFrame + MAX_PATH_TRACE_SAMPLES) return; // more than 256 samples doesn't improve the image
 
       // Swap the front and back buffer, and bind the correct frame buffer
       gl.useProgram(this.pathTraceProgram);
@@ -302,12 +304,10 @@ export default class Renderer {
       gl.clearColor(0, 0, 0, 1);
       gl.clear(gl.COLOR_BUFFER_BIT);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
+    } else {
 
-      state.pathTraceFrame++;
-      return; 
-    }
-
-    // Reset frame buffer so we can render to the screen
+      
+      // Reset frame buffer so we can render to the screen
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     
     // Use the viewer program for rendering to the screen
@@ -315,19 +315,20 @@ export default class Renderer {
     
     // TODO: Only update uniforms when they change, not all of them every time
     this.setInitialUniforms(viewerUniformDict);
-
+    
     // Render 
     gl.viewport(0, 0, canvas.width, canvas.height);
     gl.clearColor(0, 0, 0, 1);
     gl.clear(gl.COLOR_BUFFER_BIT);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
-
-    state.frame++;
   }
-
+  
+  state.frame++;
+}
+  
   initScene(svdag: SVDAG) {
     this.svdag = svdag;
-    this.state.lightPos.set(svdag.bboxEnd);
+    vec3.copy(this.state.lightPos, svdag.bboxEnd);
   }
 
   async initShaders() {
@@ -441,10 +442,13 @@ export default class Renderer {
 
     gl.uniformMatrix4fv(ud.viewMatInv, false, camera.viewMatInv);
     gl.uniformMatrix4fv(ud.projMatInv, false, camera.projMatInv);
+    gl.uniformMatrix4fv(ud.prevViewMatInv, false, camera.prevViewMatInv);
+    // Store the previous view matrix for re-projection
+    mat4.copy(camera.prevViewMatInv, camera.projMatInv);
 
     // Todo: make this a vec4 like shadertoy
     gl.uniform1f(ud.time, new Date().getTime() / 1000 - state.startTime);
-    gl.uniform1ui(ud.ptFrame, state.pathTraceFrame);
+    gl.uniform1ui(ud.ptFrame, state.frame);
 
     gl.uniform1i(ud.nPathTraceBounces, state.nPathTraceBounces);
     gl.uniform1f(ud.depthOfField, state.depthOfField);

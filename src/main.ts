@@ -249,9 +249,9 @@ export async function loadScene(sceneOption: SceneOption) {
   // If the bbox center is different, it's probably a new scene, so reset camera
   if (vec3.dist(oldBboxCenter, svdag.bboxCenter) > 0.001 || svdag.renderPreferences.spawnPosition) {
     if (!svdag.renderPreferences.spawnPosition) {
-      camera.position.set(svdag.bboxEnd);
+      vec3.copy(camera.position, svdag.bboxEnd);
     }
-    camera.target.set(svdag.bboxCenter);
+    vec3.copy(camera.target, svdag.bboxCenter);
     if (!svdag.renderPreferences.moveSpeed) {
       setMoveSpeed(vec3.distance(svdag.bboxStart, svdag.bboxEnd) * 0.01);
     }
@@ -327,10 +327,10 @@ function render() {
 
   if (didUpdate || haveSettingsChanged) {
     haveSettingsChanged = false;
-    renderer.state.pathTraceFrame = 0; // restart path tracing if scene changed, since previous frames are used which are invalidated when an update occurs
+    renderer.state.cameraUpdateFrame = renderer.state.frame; // restart path tracing if scene changed, since previous frames are used which are invalidated when an update occurs
   }
   if (renderer.state.renderMode === RenderMode.PATH_TRACING) {
-    progressBar.style.width = `${100 * renderer.state.pathTraceFrame / MAX_PATH_TRACE_SAMPLES}%`;
+    progressBar.style.width = `${100 * (renderer.state.frame - renderer.state.cameraUpdateFrame) / MAX_PATH_TRACE_SAMPLES}%`;
   } else {
     progressBar.style.width = '0%';
   }

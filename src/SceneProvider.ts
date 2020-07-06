@@ -82,8 +82,8 @@ export default class SceneProvider {
   }
 
   private static generateBaseFractal(svdag: SVDAG, nNodes: number, nodeData: Uint32Array) {
-     svdag.bboxStart.set([0, 0, 0]);
-     svdag.bboxEnd.set([100, 100, 100]);
+     vec3.set(svdag.bboxStart, 0, 0, 0);
+     vec3.set(svdag.bboxEnd, 100, 100, 100);
      vec3.sub(svdag.bboxCenter, svdag.bboxEnd, svdag.bboxStart);
      vec3.scaleAndAdd(svdag.bboxCenter, svdag.bboxStart, svdag.bboxCenter, 0.5);
      svdag.rootSide = 100;

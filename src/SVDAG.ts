@@ -46,9 +46,9 @@ export class SVDAG extends EncodedOctree {
   parseHeader(buffer: ArrayBuffer) {
 
     let i = 0;
-    this.bboxStart.set(new Float32Array(buffer.slice(i, i + 12))); // first 12 bytes is bbox start
+    vec3.copy(this.bboxStart, new Float32Array(buffer.slice(i, i + 12))); // first 12 bytes is bbox start
     i += 12;
-    this.bboxEnd.set(new Float32Array(buffer.slice(i, i + 12))); // second 12 bytes is bbox end
+    vec3.copy(this.bboxEnd, new Float32Array(buffer.slice(i, i + 12))); // second 12 bytes is bbox end
     i += 12;
     this.rootSide = new Float32Array(buffer.slice(i, i + 4))[0];
     i += 4;
@@ -124,7 +124,7 @@ export class SVDAG extends EncodedOctree {
     // Transform world position to the [0, 1] range
     // const gridPos = vec3.scale(vec3.create(), pos, 1 / (2 * this.rootSide));
     const nodeCenter = vec3.create();
-    nodeCenter.set(this.bboxCenter);
+    vec3.copy(nodeCenter, this.bboxCenter);
 
     let nodeIndex = 0;
 
@@ -168,9 +168,9 @@ export class ESVDAG extends EncodedOctree {
 
     // Header
     let i = 0;
-    this.bboxStart.set(new Float32Array(buffer.slice(i, i + 12))); // first 12 bytes is bbox start
+    vec3.copy(this.bboxStart, new Float32Array(buffer.slice(i, i + 12))); // first 12 bytes is bbox start
     i += 12;
-    this.bboxEnd.set(new Float32Array(buffer.slice(i, i + 12))); // second 12 bytes is bbox end
+    vec3.copy(this.bboxEnd, new Float32Array(buffer.slice(i, i + 12))); // second 12 bytes is bbox end
     i += 12;
     const rootSide = new Float32Array(buffer.slice(i, i + 4))[0];
     i += 4;

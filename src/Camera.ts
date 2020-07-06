@@ -9,6 +9,7 @@ class Camera {
 
   viewMat: mat4 = mat4.create();
   viewMatInv: mat4 = mat4.create();
+  prevViewMatInv: mat4 = mat4.create();
   projMat: mat4 = mat4.create();
   projMatInv: mat4 = mat4.create();
 

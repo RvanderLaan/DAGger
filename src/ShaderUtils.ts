@@ -42,8 +42,8 @@ export async function loadRaycastFragShader(gl: WebGL2RenderingContext, nLevels:
   const maxT3DTexels = gl.getParameter(gl.MAX_3D_TEXTURE_SIZE);
   const maxT3DTexelsPow2 = maxT3DTexels * maxT3DTexels;
 
-  const shaderSrcRes = await fetch('raycast.glsl');
-  // const shaderSrcRes = await fetch('raycast2.glsl');
+  const shaderSrcRes = await fetch('static/raycast.glsl');
+  // const shaderSrcRes = await fetch('static/raycast2.glsl');
   let shaderSrc = await shaderSrcRes.text();
 
   const defines = `#version 300 es
@@ -67,7 +67,7 @@ export async function loadRaycastFragShader(gl: WebGL2RenderingContext, nLevels:
 
 /** A frag shader that generates screen-space normals from a depth texture. Still WIP */
 export async function loadNormalFragShader(gl: WebGL2RenderingContext) {
-  const shaderSrcRes = await fetch('normalFromDepth.glsl');
+  const shaderSrcRes = await fetch('static/normalFromDepth.glsl');
   const shaderSrc = await shaderSrcRes.text();
   const shader = gl.createShader(gl.FRAGMENT_SHADER);
   gl.shaderSource(shader, shaderSrc);

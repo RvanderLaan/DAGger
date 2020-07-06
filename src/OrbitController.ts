@@ -125,7 +125,7 @@ export class OrbitController {
     if (updated) {
       this.camera.updateMatrices();
     }
-    this.prevMousePos.set(this.mousePos);
+    vec2.copy(this.prevMousePos, this.mousePos);
     return updated;
   }
 
@@ -167,15 +167,15 @@ export class OrbitController {
 
   onMouseDown(e: MouseEvent) {
     this.keyDownStatus[`mouse-${e.button}`] = true;
-    this.prevMousePos.set([e.clientX, e.clientY]);
-    this.mousePos.set(this.prevMousePos);
+    vec2.set(this.prevMousePos, e.clientX, e.clientY);
+    vec2.copy(this.mousePos, this.prevMousePos);
 
     this.handleClick(this.mousePos);
   }
   onTouchStart(e: TouchEvent) {
     this.keyDownStatus[`mouse-0`] = true;
-    this.prevMousePos.set([e.touches[0].clientX, e.touches[0].clientY]);
-    this.mousePos.set(this.prevMousePos);
+    vec2.set(this.prevMousePos, e.touches[0].clientX, e.touches[0].clientY);
+    vec2.copy(this.mousePos, this.prevMousePos);
     this.numTouches = e.touches.length;
   }
   
@@ -188,10 +188,10 @@ export class OrbitController {
   }
 
   onMouseMove(e: MouseEvent) {
-    this.mousePos.set(vec2.fromValues(e.clientX, e.clientY));
+    vec2.set(this.mousePos, e.clientX, e.clientY);
   }
   onTouchMove(e: TouchEvent) {
-    this.mousePos.set(vec2.fromValues(e.touches[0].clientX, e.touches[0].clientY));
+    vec2.set(this.mousePos, e.touches[0].clientX, e.touches[0].clientY);
     this.numTouches = e.touches.length;
   }
 

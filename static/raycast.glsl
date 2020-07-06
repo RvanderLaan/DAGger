@@ -18,6 +18,7 @@ uniform vec2 resolution;
 
 uniform mat4 viewMatInv;
 uniform mat4 projMatInv;
+uniform mat4 prevViewMatInv;
 
 uniform vec3 sceneBBoxMin;
 uniform vec3 sceneBBoxMax;
@@ -604,6 +605,37 @@ vec3 RandomUnitVector(inout uint state) {
   return vec3(x, y, z);
 }
 
+vec3 reproject(in vec3 hitPos) {
+  // We have a world position
+  vec4 wpos = vec4(hitPos, 1.);
+  // That we convert to camera space (the coordinate system of the camera)
+  vec4 cpos = wpos * (projMatInv * prevViewMatInv );
+  // Then we can project the camera-space position on the camera plane
+  vec2 npos = cpos.xy / cpos.z;
+  // And this needs to be moved from [-1, 1] to [0, 1]
+  vec2 spos = 0.5 + 0.5*(npos * vec2(resolution.y / float(resolution.x), 1));
+	// And then to the lookup position (the pixel coordinate in the previous frame)
+  vec2 rpos = spos * resolution;
+  // look up color at this pixel of previous frame
+  return texelFetch(prevFrameTex, ivec2(rpos), 0).rgb;
+
+  // vec4 pixel_s0 = vec4(pixelScreenCoords.x, pixelScreenCoords.y, 0, 1);
+  // vec4 pixel_s1 = vec4(pixelScreenCoords.x, pixelScreenCoords.y, 1, 1);
+  // Assuming projection matrix doesn't change inbetween two frames
+  // vec3 pixel_w0 = fromHomog(projMatInv * pixel_s0);
+  // vec3 pixel_w1 = fromHomog(projMatInv * pixel_s1);
+  
+  // Ray r;
+  // vec3 ro = vec3(0,0,0);
+  // vec3 rd = normalize(pixel_w1 - pixel_w0);
+  
+  // vec3 o_prime = vec3(prevViewMatInv * vec4(r.o, 1));
+  // vec3 e_prime = vec3(prevViewMatInv * vec4(r.d, 1));
+  // r.o = o_prime;
+  // r.d = normalize(e_prime - o_prime);
+  // return r;
+}
+
 void main() {
   // Path tracing based on https://blog.demofox.org/2020/05/25/casual-shadertoy-path-tracing-1-basic-camera-diffuse-emissive/
 
@@ -631,6 +663,7 @@ void main() {
 
   r.o += origJitter * depthOfField; // Depth of field: randomly move the camera origin for each sample
 
+  vec3 hitPos;
   vec3 hitNorm;
   vec4 result;
   vec3 albedo;
@@ -648,8 +681,8 @@ void main() {
 	  result = trace_ray(r, t_min_max, projectionFactor, hitNorm);
 
     if (result.x < 0.) { // no hit: For now, background is pure white light, could use environment map or procedurally generated sky
-      color += vec3(0.8) * throughput;  // constant white color
-      // color += r.d * throughput;  // ray direction as color
+      // color += vec3(0.8) * throughput;  // constant white color
+      color += abs(r.d) * throughput;  // ray direction as color
       break;
     }
 
@@ -660,6 +693,9 @@ void main() {
     r.o = r.o + result.x * r.d;
     // And points into random direction relative to the hit normal
     r.d = normalize(hitNorm + RandomUnitVector(rngState));
+
+    // Store initial hit position
+    if (i == 0) hitPos = r.o;
 
     // add emissive lighting to color
     // float emissionFreq =  32. * 2. * 3.14159 / rootHalfSide;
@@ -690,10 +726,24 @@ void main() {
 #endif
 
   // average the frames together
-  vec3 lastFrameColor = texelFetch(prevFrameTex, ivec2(gl_FragCoord.xy), 0).rgb;
-  color = mix(lastFrameColor, color, 1.0f / float(ptFrame + 1u));
 
+  // TODO: Could also apply re-projection:
+  // For this hit-point, look up the pixel coordinate it was in the previous frame using the previous frame's camera matrix
+  // and average the color of that pixel in the previous frame with the color of this one
+  // This would "solve" the noise you see for the first frame(s) after the camera updates
+  // An example implementation is here, looks relatively easy: https://www.shadertoy.com/view/3tsyzl
+  
+  // Mix previous frame's color with current color
+  // color = mix(lastFrameColor, color, 1.0f / float(ptFrame + 1u));
+
+  if (ptFrame > 0u) {
+    // vec3 lastFrameColor = texelFetch(prevFrameTex, ivec2(gl_FragCoord.xy), 0).rgb; // pick same pixel as this frame
+    vec3 lastFrameColor = reproject(hitPos); // re-project the pixel for the hit position we found in the last frame
+    color = mix(lastFrameColor, color, 0.06);
+  }
   fragColor = vec4(color, 1);
+
+
 
 #if 0 // SSAO code
   // Sampling based on Screen space AO from https://lingtorp.com/2019/01/18/Screen-Space-Ambient-Occlusion.html
