@@ -607,19 +607,25 @@ vec3 RandomUnitVector(inout uint state) {
 
 vec3 reproject(in vec3 hitPos) {
   // vec2 screenCoords = (gl_FragCoord.xy / resolution) * 2.0 - 1.0;
+  
+  vec2 screenCoords = (gl_FragCoord.xy / resolution) * 2.0 - 1.0;
+  Ray r = computeCameraRay(screenCoords);
 
-  // TODO: Somethin weird going on - do we need to be in _world_ position, or within the bounds _relative_octree_ position (ray is moved in box in trace_ray)?
-  // We have a world position
-  vec4 wpos = vec4(hitPos, 1.);
+  // The hitPos is the grid position. For the world position, we must un-transform it
+  // Move from LOCAL box to WORLD pos
+  float scale = (2.0 * rootHalfSide);
+  vec3 octree_min = sceneCenter - vec3(rootHalfSide);
+  vec3 wpos = (hitPos * scale) + octree_min;
+
   // That we convert to camera space (the coordinate system of the camera)
-  vec4 cpos = wpos * (projMatInv * prevViewMatInv);
-  // Then we can project the camera-space position on the camera plane
-  vec2 npos = cpos.xy / cpos.z;
-  // And this needs to be moved from [-1, 1] to [0, 1]
-  vec2 rpos = 1.0 + resolution * npos;
-  // vec2 spos = 0.5 + 0.5 * (npos * vec2(resolution.y / float(resolution.x), 1));
-	// And then to the lookup position (the pixel coordinate in the previous frame)
-  // vec2 rpos = spos * resolution;
+  vec3 cpos = fromHomog(inverse(viewMatInv * projMatInv) * vec4(wpos, 1.0));
+  // Then we can project the camera-space position on the camera plane [-1, 1]
+  vec2 npos = cpos.xy / -cpos.z;
+  // And this needs to be moved from [-1, 1] to [0, 1] to [0, width (or height)]
+  vec2 rpos = (npos * 0.5 + 0.5) * resolution;
+
+  // return vec3(rpos / resolution, 0.5);
+
   // look up color at this pixel of previous frame
   return texelFetch(prevFrameTex, ivec2(rpos), 0).rgb;
 
@@ -741,12 +747,13 @@ void main() {
   // Mix previous frame's color with current color
   // color = mix(lastFrameColor, color, 1.0f / float(ptFrame + 1u));
 
-  if (ptFrame > 0u) {
+  if (ptFrame > 5u) {
     // vec3 lastFrameColor = texelFetch(prevFrameTex, ivec2(gl_FragCoord.xy), 0).rgb; // pick same pixel as this frame
     vec3 lastFrameColor = reproject(hitPos); // re-project the pixel for the hit position we found in the last frame
     color = mix(lastFrameColor, color, 0.06); // todo: could weight earlier frames higher than late frames (when view updates)
   }
   fragColor = vec4(color, 1);
+  // fragColor = vec4(hitPos / rootHalfSide, 1.0);
 
 
 

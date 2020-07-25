@@ -444,7 +444,7 @@ export default class Renderer {
     gl.uniformMatrix4fv(ud.projMatInv, false, camera.projMatInv);
     gl.uniformMatrix4fv(ud.prevViewMatInv, false, camera.prevViewMatInv);
     // Store the previous view matrix for re-projection
-    mat4.copy(camera.prevViewMatInv, camera.projMatInv);
+    mat4.copy(camera.prevViewMatInv, camera.viewMatInv);
 
     // Todo: make this a vec4 like shadertoy
     gl.uniform1f(ud.time, new Date().getTime() / 1000 - state.startTime);

@@ -11,7 +11,7 @@
       font-family: sans-serif;
       font-size: 14px;
     }
-    canvas {
+    #glCanvas {
       position: absolute;
       top: 50%;
       left: 50%;
@@ -60,10 +60,26 @@
     #file-input {
       display: none;
     }
+
+    #node-graph {
+      position: absolute;
+      width: 50%;
+      height: 100%;
+      left: 0;
+      z-index: 1;
+      background-color: rgba(200, 200, 200, 0.8);
+    }
   </style>
 </header>
 <body>
-  <canvas id="glCanvas"></canvas>
+
+  <main>
+    <canvas id="glCanvas"></canvas>
+    <!-- <aside id="node-graph-panel">
+      <canvas id="node-graph"></canvas>
+    </aside> -->
+  </main>
+
   <div id="overlay">
 
     <div id="progress-container">

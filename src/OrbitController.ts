@@ -170,6 +170,8 @@ export class OrbitController {
     vec2.set(this.prevMousePos, e.clientX, e.clientY);
     vec2.copy(this.mousePos, this.prevMousePos);
 
+    console.log(this.camera.viewMatInv, this.camera.projMatInv);
+
     this.handleClick(this.mousePos);
   }
   onTouchStart(e: TouchEvent) {

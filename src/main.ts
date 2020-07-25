@@ -4,6 +4,7 @@ import Camera from "./Camera";
 import Renderer, { RenderMode, MAX_PATH_TRACE_SAMPLES } from "./Renderer";
 import OrbitController from "./OrbitController";
 import SceneProvider, { SceneOption, PreloadedSceneOption } from "./SceneProvider";
+import NodeGraph from "./nodeGraph";
 
 export const GL = WebGL2RenderingContext;
 
@@ -453,6 +454,13 @@ async function init() {
   // TODO: Beam optimization (coarse pre-render to avoid tracing empty space in front of camera for all pixels)
   // TODO: Re-use previous frame for path tracing
   render();
+
+
+  ///////////////////////////////
+  // NodeGraph:
+  // const nodeGraph = new NodeGraph(document.querySelector('#node-graph'));
+  // nodeGraph.import(scene);
+  // nodeGraph.render();
 }
 
 window.addEventListener('load', init);
