@@ -327,6 +327,7 @@ function render() {
   const didUpdate = controller.update(dt);
 
   if (didUpdate || haveSettingsChanged) {
+    renderer.state.frame = 0; // temp
     haveSettingsChanged = false;
     renderer.state.cameraUpdateFrame = renderer.state.frame; // restart path tracing if scene changed, since previous frames are used which are invalidated when an update occurs
   }

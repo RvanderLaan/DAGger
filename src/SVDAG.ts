@@ -68,6 +68,7 @@ export class SVDAG extends EncodedOctree {
     const maxBboxSz = 25000;
     if (vec3.len(this.bboxStart) === 0 && vec3.len(this.bboxEnd) > maxBboxSz) {
       console.log('Correcting large bbox (scaling 20x down)');
+
       vec3.div(this.bboxEnd, this.bboxEnd, vec3.fromValues(10, 10, 10));
       vec3.sub(this.bboxStart, this.bboxStart, vec3.fromValues(0.1, 0.1, 0.1));
       this.rootSide /= 10;

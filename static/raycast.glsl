@@ -692,8 +692,8 @@ void main() {
 	  result = trace_ray(r, t_min_max, projectionFactor, hitNorm);
 
     if (result.x < 0.) { // no hit: For now, background is pure white light, could use environment map or procedurally generated sky
-      // color += vec3(0.8) * throughput;  // constant white color
-      color += abs(r.d) * throughput;  // ray direction as color
+      color += vec3(0.8) * throughput;  // constant white color
+      // color += abs(r.d) * throughput;  // ray direction as color
       break;
     }
 
@@ -747,10 +747,11 @@ void main() {
   // Mix previous frame's color with current color
   // color = mix(lastFrameColor, color, 1.0f / float(ptFrame + 1u));
 
-  if (ptFrame > 5u) {
-    // vec3 lastFrameColor = texelFetch(prevFrameTex, ivec2(gl_FragCoord.xy), 0).rgb; // pick same pixel as this frame
-    vec3 lastFrameColor = reproject(hitPos); // re-project the pixel for the hit position we found in the last frame
-    color = mix(lastFrameColor, color, 0.06); // todo: could weight earlier frames higher than late frames (when view updates)
+  if (ptFrame > 0u) {
+    vec3 lastFrameColor = texelFetch(prevFrameTex, ivec2(gl_FragCoord.xy), 0).rgb; // pick same pixel as this frame
+    // vec3 lastFrameColor = reproject(hitPos); // re-project the pixel for the hit position we found in the last frame
+    // color = mix(lastFrameColor, color, 0.06); // todo: could weight earlier frames higher than late frames (when view updates)
+    color = mix(lastFrameColor, color, 1.0f / float(ptFrame + 1u));
   }
   fragColor = vec4(color, 1);
   // fragColor = vec4(hitPos / rootHalfSide, 1.0);
