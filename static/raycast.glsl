@@ -625,25 +625,12 @@ vec3 reproject(in vec3 hitPos, in vec3 camPos, in vec3 camDir) {
     vec3 reprojectedP = fromHomog(prevCamMat * p);
     reprojectedP.xy = (reprojectedP.xy + 1.0) / 2.0;
 
-    vec2 screenPos = ((gl_FragCoord.xy * 2.0) - 1.0) / resolution;
+    vec2 screenPos = gl_FragCoord.xy / resolution;
     float offset = length(screenPos - reprojectedP.xy);
-    if (offset > 8. || reprojectedP.x < 0. || reprojectedP.y < 0. || reprojectedP.x > 1. || reprojectedP.y > 1.) {
+    if (offset > 0.02 || reprojectedP.x < 0. || reprojectedP.y < 0. || reprojectedP.x > 1. || reprojectedP.y > 1.) {
       return vec3(-1);
     }
-
-    // if (gl_FragCoord.x < resolution.x * 0.333) { // picking same pixel as starting with
-    //   return texelFetch(prevFrameTex, ivec2((gl_FragCoord.xy)), 0).rgb;
-    // } else if (gl_FragCoord.x < resolution.x * 0.666) { // reprojecting with the current camera matrix
-    //   reprojectedP = fromHomog(inverse(camMatInv) * p);
-    //   reprojectedP.xy = (reprojectedP.xy + 1.0) / 2.0;
-    //   return texelFetch(prevFrameTex, ivec2((reprojectedP.xy * resolution)), 0).rgb;
-    // } else { // the "new" and hopefully improved temporal reprojection
-      return texelFetch(prevFrameTex, ivec2((reprojectedP.xy * resolution)), 0).rgb;
-    // }
-
-    // vec3 nonReprojCol = texelFetch(prevFrameTex, ivec2((gl_FragCoord.xy)), 0).rgb;
-    // vec3 reprojCol = texelFetch(prevFrameTex, ivec2((reprojectedP.xy * resolution)), 0).rgb;
-    // return vec3(length(nonReprojCol - reprojCol) * 1000.);
+    return texelFetch(prevFrameTex, ivec2((reprojectedP.xy * resolution)), 0).rgb;
 }
 
 void main() {
@@ -763,17 +750,6 @@ void main() {
     }
   }
   fragColor = vec4(color * brightness, 1);
-  // fragColor = vec4(hitPos / rootHalfSide, 1.0);
-
-// Debug current - prev cam mat
-  // float scale = 100.;
-  // if (gl_FragCoord.x < 4. * scale && gl_FragCoord.y < 4. * scale) {
-  //   mat4 camMat = inverse(camMatInv);
-  //   int i = int(gl_FragCoord.x / scale);
-  //   int j = int(gl_FragCoord.y / scale) * 4;
-  //   fragColor = vec4(vec3(abs(camMat[i][j] - prevCamMat[i][j]), 0, 0) * 1000., 1);
-  //   // fragColor = vec4(vec3(camMat[i][j], 0, 0), 1);
-  // }
 
 #if 0 // SSAO code
   // Sampling based on Screen space AO from https://lingtorp.com/2019/01/18/Screen-Space-Ambient-Occlusion.html
