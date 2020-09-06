@@ -8022,7 +8022,7 @@ const UNIFORMS = [
     'minDepthTex', 'useBeamOptimization',
     'depthTex', 'hitNormTex',
     'ptFrame', 'prevFrameTex', 'nPathTraceBounces', 'depthOfField',
-    'skyMode'
+    'skyMode', 'dynamicTRP'
 ];
 const NORMAL_UNIFORMS = ['depthTex', 'viewProjMatInv'];
 const TEX_UNIFORMS = ['tex'];
@@ -8062,6 +8062,7 @@ class Renderer {
             selectedVoxelIndex: -1,
             lightPos: gl_matrix__WEBPACK_IMPORTED_MODULE_1__["vec3"].create(),
             skyMode: 0,
+            dynamicTRP: true,
         };
         this.gl = canvas.getContext("webgl2");
         this.maxT3DTexels = this.gl.getParameter(this.gl.MAX_3D_TEXTURE_SIZE);
@@ -8251,6 +8252,7 @@ class Renderer {
         gl.uniform1i(ud.nPathTraceBounces, state.nPathTraceBounces);
         gl.uniform1f(ud.depthOfField, state.depthOfField);
         gl.uniform1i(ud.skyMode, state.skyMode);
+        gl.uniform1i(ud.dynamicTRP, state.dynamicTRP ? 1 : 0);
         gl.uniform1i(ud.useBeamOptimization, state.useBeamOptimization ? 1 : 0);
         gl.uniform1i(ud.minDepthTex, 1);
         gl.uniform1i(ud.depthTex, 2);
@@ -8797,6 +8799,11 @@ function setSkyMode(num) {
     haveSettingsChanged = true;
 }
 win.setSkyMode = setSkyMode.bind(undefined);
+function setReprojectionMode(val) {
+    renderer.state.dynamicTRP = val;
+    haveSettingsChanged = true;
+}
+win.setReprojectionMode = setReprojectionMode.bind(undefined);
 function setMoveSpeed(num) {
     controller.moveSpeed = typeof num === 'number' ? num : parseFloat(num);
     document.getElementById('moveSpeed').value = controller.moveSpeed.toFixed(1);
