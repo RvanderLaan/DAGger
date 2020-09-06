@@ -52,6 +52,8 @@ uniform sampler2D prevFrameTex;
 uniform int nPathTraceBounces;
 uniform float depthOfField;
 
+uniform int skyMode; // 0 = white, 1 = ray dir, 2 = blue sky/sunset (?)
+
 // uniform uint levelOffsets[INNER_LEVELS];
 
 ivec3 stack[MAX_STACK_DEPTH];
@@ -627,7 +629,7 @@ vec3 reproject(in vec3 hitPos, in vec3 camPos, in vec3 camDir) {
 
     vec2 screenPos = gl_FragCoord.xy / resolution;
     float offset = length(screenPos - reprojectedP.xy);
-    if (offset > 0.02 || reprojectedP.x < 0. || reprojectedP.y < 0. || reprojectedP.x > 1. || reprojectedP.y > 1.) {
+    if (offset > 0.1 || reprojectedP.x < 0. || reprojectedP.y < 0. || reprojectedP.x > 1. || reprojectedP.y > 1.) {
       return vec3(-1);
     }
     return texelFetch(prevFrameTex, ivec2((reprojectedP.xy * resolution)), 0).rgb;
@@ -681,8 +683,22 @@ void main() {
 	  result = trace_ray(r, t_min_max, projectionFactor, hitNorm);
 
     if (result.x < 0.) { // no hit: For now, background is pure white light, could use environment map or procedurally generated sky
-      color += vec3(0.8) * throughput;  // constant white color
-      // color += abs(r.d) * throughput;  // ray direction as color
+      if (skyMode == 0) {
+        color += vec3(0.8) * throughput;  // constant white color
+      } else if (skyMode == 1) {
+        color += abs(r.d) * throughput;  // ray direction as color
+      } else {
+        // Blue sky color
+        vec3 athmosphere = mix(
+          vec3(.1, .2, .3),
+          vec3(.6, .75, .95),
+          sqrt((r.d.y + 1.) / 2.));
+        athmosphere = mix(
+          athmosphere,
+          vec3(1.5, 1.2, 0.5),
+          pow((dot(normalize(lightPos - sceneCenter), r.d) + 1.) / 2., 32.));
+        color += athmosphere;
+      }
       break;
     }
 
@@ -741,12 +757,15 @@ void main() {
   float brightness = 1.;
 
   if (ptFrame > 1u) {
-    // vec3 lastFrameColor = texelFetch(prevFrameTex, ivec2(gl_FragCoord.xy), 0).rgb; // pick same pixel as this frame
     vec3 lastFrameColor = reproject(hitPos, camPos, camDir); // re-project the pixel for the hit position we found in the last frame
    
     // color = lastFrameColor;
     if (lastFrameColor.x > 0.) {
-      color = mix(lastFrameColor / brightness, color, 0.1);
+      color = mix(lastFrameColor / brightness, color, 0.06);
+    } else {
+      // pick same pixel as this frame, just to avoid noise. It's kinda annoying though...
+      // lastFrameColor = texelFetch(prevFrameTex, ivec2(gl_FragCoord.xy), 0).rgb; 
+      // color = mix(lastFrameColor / brightness, color, 0.2);
     }
   }
   fragColor = vec4(color * brightness, 1);

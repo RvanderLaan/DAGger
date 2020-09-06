@@ -15,7 +15,8 @@ const UNIFORMS = [
   'lightPos', 'enableShadows', 'normalEpsilon',
   'minDepthTex', 'useBeamOptimization',
   'depthTex', 'hitNormTex',
-  'ptFrame', 'prevFrameTex', 'nPathTraceBounces', 'depthOfField'
+  'ptFrame', 'prevFrameTex', 'nPathTraceBounces', 'depthOfField',
+  'skyMode'
 ] as const;
 type Uniform = typeof UNIFORMS[number];
 
@@ -42,6 +43,13 @@ export enum RenderMode {
   NORMAL = 4,
 }
 
+export enum SkyMode {
+  WHITE = 0,
+  RAY_DIRECTION = 1,
+  ATHMOSPHERE = 2,
+  // SUNRISE = 3,
+}
+
 export const MAX_PATH_TRACE_SAMPLES = 64;
 
 export interface IRendererState {
@@ -60,6 +68,7 @@ export interface IRendererState {
   depthOfField: number;
   selectedVoxelIndex: number;
   lightPos: vec3;
+  skyMode: SkyMode;
 }
 
 export default class Renderer {
@@ -119,6 +128,7 @@ export default class Renderer {
     depthOfField: 0,
     selectedVoxelIndex: -1,
     lightPos: vec3.create(),
+    skyMode: 0,
   };
 
   constructor(
@@ -470,6 +480,7 @@ export default class Renderer {
 
     gl.uniform1i(ud.nPathTraceBounces, state.nPathTraceBounces);
     gl.uniform1f(ud.depthOfField, state.depthOfField);
+    gl.uniform1i(ud.skyMode, state.skyMode);
 
     gl.uniform1i(ud.useBeamOptimization, state.useBeamOptimization ? 1 : 0);
     gl.uniform1i(ud.minDepthTex, 1);

@@ -1,7 +1,7 @@
 import { SVDAG } from "./SVDAG";
 import { vec3 } from "gl-matrix";
 import Camera from "./Camera";
-import Renderer, { RenderMode, MAX_PATH_TRACE_SAMPLES } from "./Renderer";
+import Renderer, { RenderMode, MAX_PATH_TRACE_SAMPLES, SkyMode } from "./Renderer";
 import OrbitController from "./OrbitController";
 import SceneProvider, { SceneOption, PreloadedSceneOption } from "./SceneProvider";
 import NodeGraph from "./nodeGraph";
@@ -16,7 +16,7 @@ let scene: SVDAG;
 
 const sceneList: SceneOption[] = [];
 
-const camera = new Camera(60);
+const camera = new Camera(75);
 let renderer: Renderer;
 
 const win = window as any;
@@ -62,6 +62,14 @@ function setRenderMode(num: RenderMode | string) {
   haveSettingsChanged = true;
 }
 win.setRenderMode = setRenderMode.bind(this);
+
+function setSkyMode(num: SkyMode | string) {
+  console.log('setting sky mode', num)
+  renderer.state.skyMode = typeof num === 'string' ? parseInt(num, 10) : num;
+  (document.getElementById('skyMode') as HTMLInputElement).value = `${renderer.state.skyMode}`;
+  haveSettingsChanged = true;
+}
+win.setSkyMode = setSkyMode.bind(this);
 
 function setMoveSpeed(num: number | string) {
   controller.moveSpeed = typeof num === 'number' ? num : parseFloat(num);
@@ -433,7 +441,6 @@ async function init() {
 
   // "main" key event listener
   canvas.addEventListener('keydown', (e) => {
-    console.log(e.key)
     if (e.key === '1') {
       setDrawLevel(renderer.state.drawLevel - 1);
     } else if (e.key === '2') {
