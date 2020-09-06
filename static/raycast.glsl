@@ -53,6 +53,7 @@ uniform int nPathTraceBounces;
 uniform float depthOfField;
 
 uniform int skyMode; // 0 = white, 1 = ray dir, 2 = blue sky/sunset (?)
+uniform bool dynamicTRP; // dynamic/static temporal reprojection
 
 // uniform uint levelOffsets[INNER_LEVELS];
 
@@ -757,16 +758,16 @@ void main() {
   float brightness = 1.;
 
   if (ptFrame > 1u) {
-    vec3 lastFrameColor = reproject(hitPos, camPos, camDir); // re-project the pixel for the hit position we found in the last frame
-   
-    // color = lastFrameColor;
-    if (lastFrameColor.x > 0.) {
-      color = mix(lastFrameColor / brightness, color, 0.06);
+    if (dynamicTRP) {
+      vec3 lastFrameColor = reproject(hitPos, camPos, camDir); // re-project the pixel for the hit position we found in the last frame
+      if (lastFrameColor.x > 0.) {
+        color = mix(lastFrameColor / brightness, color, 0.06);
+      }
     } else {
-      // pick same pixel as this frame, just to avoid noise. It's kinda annoying though...
-      // lastFrameColor = texelFetch(prevFrameTex, ivec2(gl_FragCoord.xy), 0).rgb; 
-      // color = mix(lastFrameColor / brightness, color, 0.2);
+      vec3 lastFrameColor = texelFetch(prevFrameTex, ivec2(gl_FragCoord.xy), 0).rgb;
+      color = mix(lastFrameColor, color, .06);// 1.0f / float(ptFrame + 1u)
     }
+
   }
   fragColor = vec4(color * brightness, 1);
 

@@ -16,7 +16,7 @@ const UNIFORMS = [
   'minDepthTex', 'useBeamOptimization',
   'depthTex', 'hitNormTex',
   'ptFrame', 'prevFrameTex', 'nPathTraceBounces', 'depthOfField',
-  'skyMode'
+  'skyMode', 'dynamicTRP'
 ] as const;
 type Uniform = typeof UNIFORMS[number];
 
@@ -69,6 +69,8 @@ export interface IRendererState {
   selectedVoxelIndex: number;
   lightPos: vec3;
   skyMode: SkyMode;
+  /** Dynamic temporal reprojection */
+  dynamicTRP: boolean;
 }
 
 export default class Renderer {
@@ -129,6 +131,7 @@ export default class Renderer {
     selectedVoxelIndex: -1,
     lightPos: vec3.create(),
     skyMode: 0,
+    dynamicTRP: true,
   };
 
   constructor(
@@ -481,6 +484,7 @@ export default class Renderer {
     gl.uniform1i(ud.nPathTraceBounces, state.nPathTraceBounces);
     gl.uniform1f(ud.depthOfField, state.depthOfField);
     gl.uniform1i(ud.skyMode, state.skyMode);
+    gl.uniform1i(ud.dynamicTRP, state.dynamicTRP ? 1 : 0);
 
     gl.uniform1i(ud.useBeamOptimization, state.useBeamOptimization ? 1 : 0);
     gl.uniform1i(ud.minDepthTex, 1);

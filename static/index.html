@@ -28,7 +28,7 @@
       top: 0%;
       right: 0%;
       width: 200px;
-      max-height: 300px;
+      max-height: 320px;
       background: rgba(20, 20, 20, 0.5);
       color: white;
       padding: 4px;
@@ -142,6 +142,13 @@
 
       <br />
 
+      <label for="reprojectionMode" title="Whether to reproject pixels from the previous frame using the previous camera transform (better interactivity), or to naively average the previous frame with the current one (converges faster)">
+        Dynamic Temporal Reproj.
+      </label>
+      <input type="checkbox" id="reprojectionMode" checked="true" onchange="setReprojectionMode(this.checked)" />
+
+      <br />
+
       <label for="renderScale" title="Down- or upscale the render resolution">
         Render scale</label>
       <input type="number" id="renderScale" min="0.25" max="2.0" value="1.0" step="0.25"
@@ -171,7 +178,7 @@
       <br />
 
       <label for="uniqueColors" title="Assigns unique colors to each identical node in memory">Unique colors</label>
-      <input type="checkbox" id="uniqueColors" value="false" onchange="setShowUniqueColors(this.checked)" />
+      <input type="checkbox" id="uniqueColors" onchange="setShowUniqueColors(this.checked)" />
 
       <br /> 
 

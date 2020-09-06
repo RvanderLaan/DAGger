@@ -71,6 +71,12 @@ function setSkyMode(num: SkyMode | string) {
 }
 win.setSkyMode = setSkyMode.bind(this);
 
+function setReprojectionMode(val: boolean) {
+  renderer.state.dynamicTRP = val;
+  haveSettingsChanged = true;
+}
+win.setReprojectionMode = setReprojectionMode.bind(this);
+
 function setMoveSpeed(num: number | string) {
   controller.moveSpeed = typeof num === 'number' ? num : parseFloat(num);
   (document.getElementById('moveSpeed') as HTMLInputElement).value = controller.moveSpeed.toFixed(1);
