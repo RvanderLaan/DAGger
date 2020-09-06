@@ -1,8 +1,7 @@
 import Camera from './Camera';
 import { SVDAG } from './SVDAG'
 import { loadProgram, loadVertShader, loadRaycastFragShader, loadNormalFragShader, loadTextureFragShader } from './ShaderUtils';
-import { mat4, vec3, vec4 } from 'gl-matrix';
-import { Vector4, Matrix4 } from 'three';
+import { mat4, vec3 } from 'gl-matrix';
 
 // Coupled to the glsl shader
 const UNIFORMS = [
@@ -431,7 +430,7 @@ export default class Renderer {
     gl.uniform1f(ud.rootHalfSide, svdag.rootSide / 2.0);
 
     // TODO: Make light pos configurable, currently always bboxEnd
-    gl.uniform3fv(ud.lightPos, svdag.bboxEnd);
+    gl.uniform3fv(ud.lightPos, state.lightPos);
 
     gl.uniform1ui(ud.maxIters, state.maxIterations);
     gl.uniform1ui(ud.drawLevel, state.drawLevel);
@@ -441,14 +440,13 @@ export default class Renderer {
 
     gl.uniform1i(ud.viewerRenderMode, state.renderMode);
 
-    gl.uniformMatrix4fv(ud.viewMatInv, false, camera.viewMatInv);
-    gl.uniformMatrix4fv(ud.projMatInv, false, camera.projMatInv);
+    // gl.uniformMatrix4fv(ud.viewMatInv, false, camera.viewMatInv);
+    // gl.uniformMatrix4fv(ud.projMatInv, false, camera.projMatInv);
 
     // Set the previous camera matrix (for reprojection), update the current mat on the cam, and set in the shader
-    mat4.mul(camera.camMatInv, camera.viewMatInv, camera.projMatInv);
+    // mat4.invert(camera.prevCamMat, camera.camMatInv);
     gl.uniformMatrix4fv(ud.camMatInv, false, camera.camMatInv);
     gl.uniformMatrix4fv(ud.prevCamMat, false, camera.prevCamMat);
-    mat4.mul(camera.prevCamMat, camera.projMat, camera.viewMat);
 
     // Double checking re-projection math. It checks out. SO WHY DOESN'T IT WORK!!?!
     // const p = vec4.fromValues(2, 4, 0, 1);
@@ -457,7 +455,7 @@ export default class Renderer {
     //   projectedP[0], projectedP[1], projectedP[2], projectedP[3],
     //   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), camera.prevCamMat);
     // console.log({ p, projectedP, reprojectedP } );
-    // Trying again with THREE math
+    // Trying again with THREE math: really checks out
     // const p = new Vector4(2, 4, 0, 1);
     // const camMatInv = new Matrix4().fromArray(this.camera.camMatInv);
     // const prevCamMat = new Matrix4().fromArray(this.camera.prevCamMat);

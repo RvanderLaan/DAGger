@@ -28,10 +28,12 @@ class Camera {
   }
 
   updateMatrices() {
+    mat4.invert(this.prevCamMat, this.camMatInv);
     mat4.lookAt(this.viewMat, this.position, this.target, this.upDir);
-    mat4.perspective(this.projMat, this.fovY, window.innerWidth / window.innerHeight, 0.1, 1);
+    mat4.perspective(this.projMat, this.fovY, window.innerWidth / window.innerHeight, 0.1, 1000);
     mat4.invert(this.projMatInv, this.projMat);
     mat4.invert(this.viewMatInv, this.viewMat);
+    mat4.mul(this.camMatInv, this.viewMatInv, this.projMatInv);
     // TODO: Recompute upDir
   }
 

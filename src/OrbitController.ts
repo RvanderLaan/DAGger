@@ -122,9 +122,9 @@ export class OrbitController {
       }
     }
 
-    if (updated) {
+    // if (updated) {
       this.camera.updateMatrices();
-    }
+    // }
     vec2.copy(this.prevMousePos, this.mousePos);
     return updated;
   }

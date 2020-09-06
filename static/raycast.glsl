@@ -621,102 +621,29 @@ vec3 RandomUnitVector(inout uint state) {
 }
 
 vec3 reproject(in vec3 hitPos, in vec3 camPos, in vec3 camDir) {
-
-// vec3 position_ws = hitPos;
-// vec3 camera_position = camPos;
-// vec3 camera_dir = camDir;
-
-// #define NEAR 1.
-
-// vec3 to_point = position_ws - camera_position;
-// vec3 to_point_nrm = normalize(to_point);
-
-// vec3 view_right = normalize(cross(vec3(0.0,0.0,1.0),camera_dir));
-// vec3 view_up = (cross(camera_dir,view_right));
-  
-// vec3 fwd = camera_dir * NEAR;
-  
-// float d = dot(camera_dir,to_point_nrm);
-// if (d < 0.01)
-//   return vec3(0.0,0.0,-1.0);
-  
-// d = NEAR / d;
-
-// to_point = to_point_nrm * d - fwd;
-
-// float x = dot(to_point,view_right);
-// float y = dot(to_point,view_up);
-
-// vec2 uv = (vec2(x, y) * 0.5 + 0.5) * resolution;
-
-// return texelFetch(prevFrameTex, ivec2(uv), 0).rgb;
-
-mat4 oldCam = prevCamMat;
-// mat4 oldCam = inverse(camMatInv);
-
-// vec4 x = vec4(oldCam0[0].xyz, -dot(oldCam0[0].xyz, camPos));
-// vec4 y = vec4(oldCam0[1].xyz, -dot(oldCam0[1].xyz, camPos));
-// vec4 z = vec4(oldCam0[2].xyz, -dot(oldCam0[2].xyz, camPos));
-
-// mat4 oldCam = mat4(x, y, z, vec4(0, 0, 0, 1));
-
-
-// return vec3(distance(hitPos - camPos) / (2. * rootHalfSide));
-
-
-// vec4 p = vec4(hitPos, 1.);
-// vec3 projectedP = fromHomog(p * oldCam);
-// vec3 reprojectedP = fromHomog(camMatInv * vec4(projectedP, 1));
-// return vec3(abs(p.xyz - reprojectedP) / 100.0);
-
-
-  /////
-
-  // vec2 screenCoords = (gl_FragCoord.xy / resolution) * 2.0 - 1.0;
-  
-  // vec2 screenCoords = (gl_FragCoord.xy / resolution) * 2.0 - 1.0;
-  // Ray r = computeCameraRay(screenCoords);
-
-  vec3 wpos = hitPos; // - camPos;
-
-  // That we convert to camera space (the coordinate system of the camera)
-  vec3 cpos = fromHomog(vec4(wpos, 0.0) * oldCam);
-  // vec3 cpos = (vec4(wpos, 1.0) * oldCam).xyz;
-
-  // return abs(cpos);
-
-  // vec3 cpos = fromHomog(inverse(viewMatInv * projMatInv) * vec4(wpos, 1.0));
-  // Then we can project the camera-space position on the camera plane [-1, 1]
-  vec2 npos = cpos.xy / -cpos.z;
-  // And this needs to be moved from [-1, 1] to [0, 1] to [0, width (or height)]
-  // Inverse of this operation:
-  // ::: vec2 screenCoords = (gl_FragCoord.xy / resolution) * 2.0 - 1.0;
-  // ::: x = (y / r) * 2 - 1 ---> y = ((x + 1) / 2) * r
-  vec2 rpos = ((npos + 1.0) / 2.0) * resolution;
-
-  // if (gl_FragCoord.x < resolution.x * 0.5) {
-  //   vec2 screenCoords = gl_FragCoord.xy / resolution;
-  //   return vec3(screenCoords, 0);
-  // } else {
-
     vec4 p = vec4(hitPos, 1);
+    vec3 reprojectedP = fromHomog(prevCamMat * p);
+    reprojectedP.xy = (reprojectedP.xy + 1.0) / 2.0;
 
-    vec3 reprojectedP = fromHomog(oldCam * p);
-    // vec3 reprojectedP = fromHomog(p * oldCam);
-    // reprojectedP.xy /= -reprojectedP.z;
-    reprojectedP.xy = ((reprojectedP.xy + 1.0) / 2.0);
-    // reprojectedP.y = 1. - reprojectedwP.y;
-    // reprojectedP.xy /= resolution;
+    vec2 screenPos = ((gl_FragCoord.xy * 2.0) - 1.0) / resolution;
+    float offset = length(screenPos - reprojectedP.xy);
+    if (offset > 8. || reprojectedP.x < 0. || reprojectedP.y < 0. || reprojectedP.x > 1. || reprojectedP.y > 1.) {
+      return vec3(-1);
+    }
 
-    // return vec3(reprojectedP.xy, 0);
-    return texelFetch(prevFrameTex, ivec2(reprojectedP.xy * resolution), 0).rgb;
+    // if (gl_FragCoord.x < resolution.x * 0.333) { // picking same pixel as starting with
+    //   return texelFetch(prevFrameTex, ivec2((gl_FragCoord.xy)), 0).rgb;
+    // } else if (gl_FragCoord.x < resolution.x * 0.666) { // reprojecting with the current camera matrix
+    //   reprojectedP = fromHomog(inverse(camMatInv) * p);
+    //   reprojectedP.xy = (reprojectedP.xy + 1.0) / 2.0;
+    //   return texelFetch(prevFrameTex, ivec2((reprojectedP.xy * resolution)), 0).rgb;
+    // } else { // the "new" and hopefully improved temporal reprojection
+      return texelFetch(prevFrameTex, ivec2((reprojectedP.xy * resolution)), 0).rgb;
+    // }
 
-    // return vec3(rpos / resolution, 0);
-  // }
-
-  // look up color at this pixel of previous frame
-  return texelFetch(prevFrameTex, ivec2(rpos), 0).rgb;
-  // return texelFetch(prevFrameTex, ivec2(gl_FragCoord.xy), 0).rgb;
+    // vec3 nonReprojCol = texelFetch(prevFrameTex, ivec2((gl_FragCoord.xy)), 0).rgb;
+    // vec3 reprojCol = texelFetch(prevFrameTex, ivec2((reprojectedP.xy * resolution)), 0).rgb;
+    // return vec3(length(nonReprojCol - reprojCol) * 1000.);
 }
 
 void main() {
@@ -767,8 +694,8 @@ void main() {
 	  result = trace_ray(r, t_min_max, projectionFactor, hitNorm);
 
     if (result.x < 0.) { // no hit: For now, background is pure white light, could use environment map or procedurally generated sky
-      // color += vec3(0.8) * throughput;  // constant white color
-      color += abs(r.d) * throughput;  // ray direction as color
+      color += vec3(0.8) * throughput;  // constant white color
+      // color += abs(r.d) * throughput;  // ray direction as color
       break;
     }
 
@@ -824,19 +751,29 @@ void main() {
   // Mix previous frame's color with current color
   // color = mix(lastFrameColor, color, 1.0f / float(ptFrame + 1u));
 
+  float brightness = 1.;
+
   if (ptFrame > 1u) {
     // vec3 lastFrameColor = texelFetch(prevFrameTex, ivec2(gl_FragCoord.xy), 0).rgb; // pick same pixel as this frame
     vec3 lastFrameColor = reproject(hitPos, camPos, camDir); // re-project the pixel for the hit position we found in the last frame
    
     // color = lastFrameColor;
     if (lastFrameColor.x > 0.) {
-      color = mix(lastFrameColor, color, 0.06); // todo: could weight earlier frames higher than late frames (when view updates)
+      color = mix(lastFrameColor / brightness, color, 0.1);
     }
   }
-  fragColor = vec4(color, 1);
+  fragColor = vec4(color * brightness, 1);
   // fragColor = vec4(hitPos / rootHalfSide, 1.0);
 
-
+// Debug current - prev cam mat
+  // float scale = 100.;
+  // if (gl_FragCoord.x < 4. * scale && gl_FragCoord.y < 4. * scale) {
+  //   mat4 camMat = inverse(camMatInv);
+  //   int i = int(gl_FragCoord.x / scale);
+  //   int j = int(gl_FragCoord.y / scale) * 4;
+  //   fragColor = vec4(vec3(abs(camMat[i][j] - prevCamMat[i][j]), 0, 0) * 1000., 1);
+  //   // fragColor = vec4(vec3(camMat[i][j], 0, 0), 1);
+  // }
 
 #if 0 // SSAO code
   // Sampling based on Screen space AO from https://lingtorp.com/2019/01/18/Screen-Space-Ambient-Occlusion.html

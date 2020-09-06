@@ -240,6 +240,8 @@ export async function loadScene(sceneOption: SceneOption) {
   if (svdag.renderPreferences.maxIterations) setMaxIterations(svdag.renderPreferences.maxIterations);
   if (svdag.renderPreferences.moveSpeed) setMoveSpeed(svdag.renderPreferences.moveSpeed);
   if (svdag.renderPreferences.spawnPosition) camera.position = svdag.renderPreferences.spawnPosition;
+  
+  vec3.copy(renderer.state.lightPos, svdag.bboxEnd);
 
   console.log('Loaded!');
   console.log(`Levels: ${svdag.nLevels}, nodes: ${svdag.nNodes}`);
@@ -431,10 +433,13 @@ async function init() {
 
   // "main" key event listener
   canvas.addEventListener('keydown', (e) => {
+    console.log(e.key)
     if (e.key === '1') {
       setDrawLevel(renderer.state.drawLevel - 1);
     } else if (e.key === '2') {
       setDrawLevel(renderer.state.drawLevel + 1);
+    } else if (e.key === 'l') {
+      vec3.copy(renderer.state.lightPos, camera.position);
     }
   });
 
