@@ -19,6 +19,9 @@ uniform vec2 resolution;
 uniform mat4 viewMatInv;
 uniform mat4 projMatInv;
 
+uniform mat4 camMatInv;
+uniform mat4 prevCamMat;
+
 uniform vec3 sceneBBoxMin;
 uniform vec3 sceneBBoxMax;
 uniform vec3 sceneCenter;
@@ -48,6 +51,8 @@ uniform sampler2D hitPosTex;    // this one does need 32 bit high accuracy
 uniform sampler2D prevFrameTex;
 uniform int nPathTraceBounces;
 uniform float depthOfField;
+
+uniform int skyMode; // 0 = white, 1 = ray dir, 2 = blue sky/sunset (?)
 
 // uniform uint levelOffsets[INNER_LEVELS];
 
@@ -392,22 +397,35 @@ vec3 fromHomog(in vec4 v) {
 }
 
 Ray computeCameraRay(in vec2 pixelScreenCoords) {
-  vec4 pixel_s0 = vec4(pixelScreenCoords.x, pixelScreenCoords.y, 0, 1);
-  vec4 pixel_s1 = vec4(pixelScreenCoords.x, pixelScreenCoords.y, 1, 1);
-  
-  vec3 pixel_w0 = fromHomog(projMatInv * pixel_s0);
-  vec3 pixel_w1 = fromHomog(projMatInv * pixel_s1);
-  
+  vec4 pixel_s0 = vec4(pixelScreenCoords, 0, 1);
+  vec4 pixel_s1 = vec4(pixelScreenCoords, 1, 1);
+
+  // mat4 prevCamMatInv = inverse(prevCamMat); // Test: is the prev mat OK? Yes, it's ok
+  vec3 wpos0 = fromHomog(camMatInv * pixel_s0);
+  vec3 wpos1 = fromHomog(camMatInv * pixel_s1);
   Ray r;
-  r.o = vec3(0,0,0);
-  r.d = normalize(pixel_w1 - pixel_w0);
-  
-  vec3 o_prime = vec3(viewMatInv * vec4(r.o, 1));
-  vec3 e_prime = vec3(viewMatInv * vec4(r.d, 1));
-  r.o = o_prime;
-  r.d = normalize(e_prime - o_prime);
+  r.o = wpos0;
+  r.d = normalize(wpos1 - wpos0);
   return r;
 }
+
+// Ray computeCameraRay(in vec2 pixelScreenCoords) {
+//   vec4 pixel_s0 = vec4(pixelScreenCoords.x, pixelScreenCoords.y, 0, 1);
+//   vec4 pixel_s1 = vec4(pixelScreenCoords.x, pixelScreenCoords.y, 1, 1);
+  
+//   vec3 pixel_w0 = fromHomog(projMatInv * pixel_s0);
+//   vec3 pixel_w1 = fromHomog(projMatInv * pixel_s1);
+  
+//   Ray r;
+//   r.o = vec3(0,0,0);
+//   r.d = normalize(pixel_w1 - pixel_w0);
+  
+//   vec3 o_prime = vec3(viewMatInv * vec4(r.o, 1));
+//   vec3 e_prime = vec3(viewMatInv * vec4(r.d, 1));
+//   r.o = o_prime;
+//   r.d = normalize(e_prime - o_prime);
+//   return r;
+// }
 
 float getMinT(in int delta) {
 	ivec2 p = ivec2((ivec2(gl_FragCoord.xy) - delta / 2) / delta);
@@ -604,6 +622,19 @@ vec3 RandomUnitVector(inout uint state) {
   return vec3(x, y, z);
 }
 
+vec3 reproject(in vec3 hitPos, in vec3 camPos, in vec3 camDir) {
+    vec4 p = vec4(hitPos, 1);
+    vec3 reprojectedP = fromHomog(prevCamMat * p);
+    reprojectedP.xy = (reprojectedP.xy + 1.0) / 2.0;
+
+    vec2 screenPos = gl_FragCoord.xy / resolution;
+    float offset = length(screenPos - reprojectedP.xy);
+    if (offset > 0.1 || reprojectedP.x < 0. || reprojectedP.y < 0. || reprojectedP.x > 1. || reprojectedP.y > 1.) {
+      return vec3(-1);
+    }
+    return texelFetch(prevFrameTex, ivec2((reprojectedP.xy * resolution)), 0).rgb;
+}
+
 void main() {
   // Path tracing based on https://blog.demofox.org/2020/05/25/casual-shadertoy-path-tracing-1-basic-camera-diffuse-emissive/
 
@@ -631,6 +662,10 @@ void main() {
 
   r.o += origJitter * depthOfField; // Depth of field: randomly move the camera origin for each sample
 
+  vec3 camPos = r.o;
+  vec3 camDir = r.d;
+
+  vec3 hitPos;
   vec3 hitNorm;
   vec4 result;
   vec3 albedo;
@@ -648,8 +683,22 @@ void main() {
 	  result = trace_ray(r, t_min_max, projectionFactor, hitNorm);
 
     if (result.x < 0.) { // no hit: For now, background is pure white light, could use environment map or procedurally generated sky
-      // color += vec3(0.8) * throughput;  // constant white color
-      color += abs(r.d) * throughput;  // ray direction as color
+      if (skyMode == 0) {
+        color += vec3(0.8) * throughput;  // constant white color
+      } else if (skyMode == 1) {
+        color += abs(r.d) * throughput;  // ray direction as color
+      } else {
+        // Blue sky color
+        vec3 athmosphere = mix(
+          vec3(.1, .2, .3),
+          vec3(.6, .75, .95),
+          sqrt((r.d.y + 1.) / 2.));
+        athmosphere = mix(
+          athmosphere,
+          vec3(1.5, 1.2, 0.5),
+          pow((dot(normalize(lightPos - sceneCenter), r.d) + 1.) / 2., 32.));
+        color += athmosphere;
+      }
       break;
     }
 
@@ -660,6 +709,11 @@ void main() {
     r.o = r.o + result.x * r.d;
     // And points into random direction relative to the hit normal
     r.d = normalize(hitNorm + RandomUnitVector(rngState));
+
+    // Store initial hit position (which is the origin of the next bounce ray)
+    if (i == 0) {
+      hitPos = r.o;
+    }
 
     // add emissive lighting to color
     // float emissionFreq =  32. * 2. * 3.14159 / rootHalfSide;
@@ -690,10 +744,31 @@ void main() {
 #endif
 
   // average the frames together
-  vec3 lastFrameColor = texelFetch(prevFrameTex, ivec2(gl_FragCoord.xy), 0).rgb;
-  color = mix(lastFrameColor, color, 1.0f / float(ptFrame + 1u));
 
-  fragColor = vec4(color, 1);
+  // TODO: Could also apply re-projection:
+  // For this hit-point, look up the pixel coordinate it was in the previous frame using the previous frame's camera matrix
+  // and average the color of that pixel in the previous frame with the color of this one
+  // This would "solve" the noise you see for the first frame(s) after the camera updates
+  // An example implementation is here, looks relatively easy: https://www.shadertoy.com/view/3tsyzl
+  
+  // Mix previous frame's color with current color
+  // color = mix(lastFrameColor, color, 1.0f / float(ptFrame + 1u));
+
+  float brightness = 1.;
+
+  if (ptFrame > 1u) {
+    vec3 lastFrameColor = reproject(hitPos, camPos, camDir); // re-project the pixel for the hit position we found in the last frame
+   
+    // color = lastFrameColor;
+    if (lastFrameColor.x > 0.) {
+      color = mix(lastFrameColor / brightness, color, 0.06);
+    } else {
+      // pick same pixel as this frame, just to avoid noise. It's kinda annoying though...
+      // lastFrameColor = texelFetch(prevFrameTex, ivec2(gl_FragCoord.xy), 0).rgb; 
+      // color = mix(lastFrameColor / brightness, color, 0.2);
+    }
+  }
+  fragColor = vec4(color * brightness, 1);
 
 #if 0 // SSAO code
   // Sampling based on Screen space AO from https://lingtorp.com/2019/01/18/Screen-Space-Ambient-Occlusion.html
