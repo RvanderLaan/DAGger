@@ -1,12 +1,13 @@
 import Camera from './Camera';
 import { SVDAG } from './SVDAG'
 import { loadProgram, loadVertShader, loadRaycastFragShader, loadNormalFragShader, loadTextureFragShader } from './ShaderUtils';
-import { mat4, vec3 } from 'gl-matrix';
+import { mat4, vec3, vec4 } from 'gl-matrix';
+import { Vector4, Matrix4 } from 'three';
 
 // Coupled to the glsl shader
 const UNIFORMS = [
   'time', 'resolution',
-  'viewMatInv', 'projMatInv', 'prevViewMatInv',
+  'viewMatInv', 'projMatInv', 'camMatInv', 'prevCamMat',
   'sceneBBoxMin', 'sceneBBoxMax', 'sceneCenter', 'rootHalfSide',
   'maxIters', 'drawLevel', 'projectionFactor',
   'nodes',
@@ -442,9 +443,28 @@ export default class Renderer {
 
     gl.uniformMatrix4fv(ud.viewMatInv, false, camera.viewMatInv);
     gl.uniformMatrix4fv(ud.projMatInv, false, camera.projMatInv);
-    gl.uniformMatrix4fv(ud.prevViewMatInv, false, camera.prevViewMatInv);
-    // Store the previous view matrix for re-projection
-    mat4.copy(camera.prevViewMatInv, camera.viewMatInv);
+
+    // Set the previous camera matrix (for reprojection), update the current mat on the cam, and set in the shader
+    mat4.mul(camera.camMatInv, camera.viewMatInv, camera.projMatInv);
+    gl.uniformMatrix4fv(ud.camMatInv, false, camera.camMatInv);
+    gl.uniformMatrix4fv(ud.prevCamMat, false, camera.prevCamMat);
+    mat4.mul(camera.prevCamMat, camera.projMat, camera.viewMat);
+
+    // Double checking re-projection math. It checks out. SO WHY DOESN'T IT WORK!!?!
+    // const p = vec4.fromValues(2, 4, 0, 1);
+    // const projectedP = vec4.transformMat4(vec4.create(), p, camera.camMatInv);
+    // const reprojectedP = mat4.multiply(mat4.create(), mat4.fromValues(
+    //   projectedP[0], projectedP[1], projectedP[2], projectedP[3],
+    //   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), camera.prevCamMat);
+    // console.log({ p, projectedP, reprojectedP } );
+    // Trying again with THREE math
+    // const p = new Vector4(2, 4, 0, 1);
+    // const camMatInv = new Matrix4().fromArray(this.camera.camMatInv);
+    // const prevCamMat = new Matrix4().fromArray(this.camera.prevCamMat);
+    // const projectedP = p.applyMatrix4(camMatInv);
+    // const projectedPT = new Matrix4().fromArray([...projectedP.toArray(), 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+    // const reprojectedP = new Matrix4().multiplyMatrices(prevCamMat, projectedPT);
+    // console.log({ p, projectedP, reprojectedP });
 
     // Todo: make this a vec4 like shadertoy
     gl.uniform1f(ud.time, new Date().getTime() / 1000 - state.startTime);

@@ -18,7 +18,9 @@ uniform vec2 resolution;
 
 uniform mat4 viewMatInv;
 uniform mat4 projMatInv;
-uniform mat4 prevViewMatInv;
+
+uniform mat4 camMatInv;
+uniform mat4 prevCamMat;
 
 uniform vec3 sceneBBoxMin;
 uniform vec3 sceneBBoxMax;
@@ -393,22 +395,35 @@ vec3 fromHomog(in vec4 v) {
 }
 
 Ray computeCameraRay(in vec2 pixelScreenCoords) {
-  vec4 pixel_s0 = vec4(pixelScreenCoords.x, pixelScreenCoords.y, 0, 1);
-  vec4 pixel_s1 = vec4(pixelScreenCoords.x, pixelScreenCoords.y, 1, 1);
-  
-  vec3 pixel_w0 = fromHomog(projMatInv * pixel_s0);
-  vec3 pixel_w1 = fromHomog(projMatInv * pixel_s1);
-  
+  vec4 pixel_s0 = vec4(pixelScreenCoords, 0, 1);
+  vec4 pixel_s1 = vec4(pixelScreenCoords, 1, 1);
+
+  // mat4 prevCamMatInv = inverse(prevCamMat); // Test: is the prev mat OK? Yes, it's ok
+  vec3 wpos0 = fromHomog(camMatInv * pixel_s0);
+  vec3 wpos1 = fromHomog(camMatInv * pixel_s1);
   Ray r;
-  r.o = vec3(0,0,0);
-  r.d = normalize(pixel_w1 - pixel_w0);
-  
-  vec3 o_prime = vec3(viewMatInv * vec4(r.o, 1));
-  vec3 e_prime = vec3(viewMatInv * vec4(r.d, 1));
-  r.o = o_prime;
-  r.d = normalize(e_prime - o_prime);
+  r.o = wpos0;
+  r.d = normalize(wpos1 - wpos0);
   return r;
 }
+
+// Ray computeCameraRay(in vec2 pixelScreenCoords) {
+//   vec4 pixel_s0 = vec4(pixelScreenCoords.x, pixelScreenCoords.y, 0, 1);
+//   vec4 pixel_s1 = vec4(pixelScreenCoords.x, pixelScreenCoords.y, 1, 1);
+  
+//   vec3 pixel_w0 = fromHomog(projMatInv * pixel_s0);
+//   vec3 pixel_w1 = fromHomog(projMatInv * pixel_s1);
+  
+//   Ray r;
+//   r.o = vec3(0,0,0);
+//   r.d = normalize(pixel_w1 - pixel_w0);
+  
+//   vec3 o_prime = vec3(viewMatInv * vec4(r.o, 1));
+//   vec3 e_prime = vec3(viewMatInv * vec4(r.d, 1));
+//   r.o = o_prime;
+//   r.d = normalize(e_prime - o_prime);
+//   return r;
+// }
 
 float getMinT(in int delta) {
 	ivec2 p = ivec2((ivec2(gl_FragCoord.xy) - delta / 2) / delta);
@@ -605,46 +620,103 @@ vec3 RandomUnitVector(inout uint state) {
   return vec3(x, y, z);
 }
 
-vec3 reproject(in vec3 hitPos) {
+vec3 reproject(in vec3 hitPos, in vec3 camPos, in vec3 camDir) {
+
+// vec3 position_ws = hitPos;
+// vec3 camera_position = camPos;
+// vec3 camera_dir = camDir;
+
+// #define NEAR 1.
+
+// vec3 to_point = position_ws - camera_position;
+// vec3 to_point_nrm = normalize(to_point);
+
+// vec3 view_right = normalize(cross(vec3(0.0,0.0,1.0),camera_dir));
+// vec3 view_up = (cross(camera_dir,view_right));
+  
+// vec3 fwd = camera_dir * NEAR;
+  
+// float d = dot(camera_dir,to_point_nrm);
+// if (d < 0.01)
+//   return vec3(0.0,0.0,-1.0);
+  
+// d = NEAR / d;
+
+// to_point = to_point_nrm * d - fwd;
+
+// float x = dot(to_point,view_right);
+// float y = dot(to_point,view_up);
+
+// vec2 uv = (vec2(x, y) * 0.5 + 0.5) * resolution;
+
+// return texelFetch(prevFrameTex, ivec2(uv), 0).rgb;
+
+mat4 oldCam = prevCamMat;
+// mat4 oldCam = inverse(camMatInv);
+
+// vec4 x = vec4(oldCam0[0].xyz, -dot(oldCam0[0].xyz, camPos));
+// vec4 y = vec4(oldCam0[1].xyz, -dot(oldCam0[1].xyz, camPos));
+// vec4 z = vec4(oldCam0[2].xyz, -dot(oldCam0[2].xyz, camPos));
+
+// mat4 oldCam = mat4(x, y, z, vec4(0, 0, 0, 1));
+
+
+// return vec3(distance(hitPos - camPos) / (2. * rootHalfSide));
+
+
+// vec4 p = vec4(hitPos, 1.);
+// vec3 projectedP = fromHomog(p * oldCam);
+// vec3 reprojectedP = fromHomog(camMatInv * vec4(projectedP, 1));
+// return vec3(abs(p.xyz - reprojectedP) / 100.0);
+
+
+  /////
+
   // vec2 screenCoords = (gl_FragCoord.xy / resolution) * 2.0 - 1.0;
   
-  vec2 screenCoords = (gl_FragCoord.xy / resolution) * 2.0 - 1.0;
-  Ray r = computeCameraRay(screenCoords);
+  // vec2 screenCoords = (gl_FragCoord.xy / resolution) * 2.0 - 1.0;
+  // Ray r = computeCameraRay(screenCoords);
 
-  // The hitPos is the grid position. For the world position, we must un-transform it
-  // Move from LOCAL box to WORLD pos
-  float scale = (2.0 * rootHalfSide);
-  vec3 octree_min = sceneCenter - vec3(rootHalfSide);
-  vec3 wpos = (hitPos * scale) + octree_min;
+  vec3 wpos = hitPos; // - camPos;
 
   // That we convert to camera space (the coordinate system of the camera)
-  vec3 cpos = fromHomog(inverse(viewMatInv * projMatInv) * vec4(wpos, 1.0));
+  vec3 cpos = fromHomog(vec4(wpos, 0.0) * oldCam);
+  // vec3 cpos = (vec4(wpos, 1.0) * oldCam).xyz;
+
+  // return abs(cpos);
+
+  // vec3 cpos = fromHomog(inverse(viewMatInv * projMatInv) * vec4(wpos, 1.0));
   // Then we can project the camera-space position on the camera plane [-1, 1]
   vec2 npos = cpos.xy / -cpos.z;
   // And this needs to be moved from [-1, 1] to [0, 1] to [0, width (or height)]
-  vec2 rpos = (npos * 0.5 + 0.5) * resolution;
+  // Inverse of this operation:
+  // ::: vec2 screenCoords = (gl_FragCoord.xy / resolution) * 2.0 - 1.0;
+  // ::: x = (y / r) * 2 - 1 ---> y = ((x + 1) / 2) * r
+  vec2 rpos = ((npos + 1.0) / 2.0) * resolution;
 
-  // return vec3(rpos / resolution, 0.5);
+  // if (gl_FragCoord.x < resolution.x * 0.5) {
+  //   vec2 screenCoords = gl_FragCoord.xy / resolution;
+  //   return vec3(screenCoords, 0);
+  // } else {
+
+    vec4 p = vec4(hitPos, 1);
+
+    vec3 reprojectedP = fromHomog(oldCam * p);
+    // vec3 reprojectedP = fromHomog(p * oldCam);
+    // reprojectedP.xy /= -reprojectedP.z;
+    reprojectedP.xy = ((reprojectedP.xy + 1.0) / 2.0);
+    // reprojectedP.y = 1. - reprojectedwP.y;
+    // reprojectedP.xy /= resolution;
+
+    // return vec3(reprojectedP.xy, 0);
+    return texelFetch(prevFrameTex, ivec2(reprojectedP.xy * resolution), 0).rgb;
+
+    // return vec3(rpos / resolution, 0);
+  // }
 
   // look up color at this pixel of previous frame
   return texelFetch(prevFrameTex, ivec2(rpos), 0).rgb;
-
-  // vec4 pixel_s0 = vec4(pixelScreenCoords.x, pixelScreenCoords.y, 0, 1);
-  // vec4 pixel_s1 = vec4(pixelScreenCoords.x, pixelScreenCoords.y, 1, 1);
-
-  // Assuming projection matrix doesn't change inbetween two frames
-  // vec3 pixel_w0 = fromHomog(projMatInv * pixel_s0);
-  // vec3 pixel_w1 = fromHomog(projMatInv * pixel_s1);
-  
-  // Ray r;
-  // vec3 ro = vec3(0,0,0);
-  // vec3 rd = normalize(pixel_w1 - pixel_w0);
-  
-  // vec3 o_prime = vec3(prevViewMatInv * vec4(r.o, 1));
-  // vec3 e_prime = vec3(prevViewMatInv * vec4(r.d, 1));
-  // r.o = o_prime;
-  // r.d = normalize(e_prime - o_prime);
-  // return r;
+  // return texelFetch(prevFrameTex, ivec2(gl_FragCoord.xy), 0).rgb;
 }
 
 void main() {
@@ -673,6 +745,9 @@ void main() {
   vec2 t_min_max = vec2(useBeamOptimization ? 0.95 * getMinT(8) : 0., 1e30f);
 
   r.o += origJitter * depthOfField; // Depth of field: randomly move the camera origin for each sample
+
+  vec3 camPos = r.o;
+  vec3 camDir = r.d;
 
   vec3 hitPos;
   vec3 hitNorm;
@@ -706,7 +781,9 @@ void main() {
     r.d = normalize(hitNorm + RandomUnitVector(rngState));
 
     // Store initial hit position (which is the origin of the next bounce ray)
-    if (i == 0) hitPos = r.o;
+    if (i == 0) {
+      hitPos = r.o;
+    }
 
     // add emissive lighting to color
     // float emissionFreq =  32. * 2. * 3.14159 / rootHalfSide;
@@ -747,10 +824,14 @@ void main() {
   // Mix previous frame's color with current color
   // color = mix(lastFrameColor, color, 1.0f / float(ptFrame + 1u));
 
-  if (ptFrame > 5u) {
+  if (ptFrame > 1u) {
     // vec3 lastFrameColor = texelFetch(prevFrameTex, ivec2(gl_FragCoord.xy), 0).rgb; // pick same pixel as this frame
-    vec3 lastFrameColor = reproject(hitPos); // re-project the pixel for the hit position we found in the last frame
-    color = mix(lastFrameColor, color, 0.06); // todo: could weight earlier frames higher than late frames (when view updates)
+    vec3 lastFrameColor = reproject(hitPos, camPos, camDir); // re-project the pixel for the hit position we found in the last frame
+   
+    // color = lastFrameColor;
+    if (lastFrameColor.x > 0.) {
+      color = mix(lastFrameColor, color, 0.06); // todo: could weight earlier frames higher than late frames (when view updates)
+    }
   }
   fragColor = vec4(color, 1);
   // fragColor = vec4(hitPos / rootHalfSide, 1.0);

@@ -9,13 +9,15 @@ class Camera {
 
   viewMat: mat4 = mat4.create();
   viewMatInv: mat4 = mat4.create();
-  prevViewMatInv: mat4 = mat4.create();
   projMat: mat4 = mat4.create();
   projMatInv: mat4 = mat4.create();
+  
+  camMatInv: mat4 = mat4.create();
+  prevCamMat: mat4 = mat4.create();
 
   constructor(fov = 60) {
     this.fovY = fov * 3.14159265359 / 180.0;
-    vec3.set(this.upDir, 0, 1, 0); // y-up by default
+    vec3.set(this.upDir, 0, 1, 0); // positive-Y up by default
   }
 
   fromHomog(v: vec4) {
