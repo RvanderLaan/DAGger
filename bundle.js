@@ -7821,7 +7821,7 @@ class Camera {
     updateMatrices() {
         gl_matrix__WEBPACK_IMPORTED_MODULE_0__["mat4"].invert(this.prevCamMat, this.camMatInv);
         gl_matrix__WEBPACK_IMPORTED_MODULE_0__["mat4"].lookAt(this.viewMat, this.position, this.target, this.upDir);
-        gl_matrix__WEBPACK_IMPORTED_MODULE_0__["mat4"].perspective(this.projMat, this.fovY, window.innerWidth / window.innerHeight, 0.1, 1000);
+        gl_matrix__WEBPACK_IMPORTED_MODULE_0__["mat4"].perspective(this.projMat, this.fovY, window.innerWidth / window.innerHeight, 0.1, 1);
         gl_matrix__WEBPACK_IMPORTED_MODULE_0__["mat4"].invert(this.projMatInv, this.projMat);
         gl_matrix__WEBPACK_IMPORTED_MODULE_0__["mat4"].invert(this.viewMatInv, this.viewMat);
         gl_matrix__WEBPACK_IMPORTED_MODULE_0__["mat4"].mul(this.camMatInv, this.viewMatInv, this.projMatInv);
@@ -8062,7 +8062,7 @@ class Renderer {
             selectedVoxelIndex: -1,
             lightPos: gl_matrix__WEBPACK_IMPORTED_MODULE_1__["vec3"].create(),
             skyMode: 0,
-            dynamicTRP: true,
+            dynamicTRP: false,
         };
         this.gl = canvas.getContext("webgl2");
         this.maxT3DTexels = this.gl.getParameter(this.gl.MAX_3D_TEXTURE_SIZE);
@@ -8076,6 +8076,13 @@ class Renderer {
         [this.normalFBO, this.normalTex] = this.setupTexFBO(gl.TEXTURE3, { internalFormat: gl.RGB8, format: gl.RGB, type: gl.UNSIGNED_BYTE });
         [this.ptFBO1, this.ptTex1] = this.setupTexFBO(gl.TEXTURE4, { internalFormat: gl.RGBA32F, format: gl.RGBA, type: gl.FLOAT });
         [this.ptFBO2, this.ptTex2] = this.setupTexFBO(gl.TEXTURE5, { internalFormat: gl.RGBA32F, format: gl.RGBA, type: gl.FLOAT });
+    }
+    resizeFBOs() {
+        const { gl, canvas } = this;
+        gl.bindTexture(gl.TEXTURE_2D, this.ptTex1);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, canvas.width, canvas.height, 0, gl.RGBA, gl.FLOAT, null);
+        gl.bindTexture(gl.TEXTURE_2D, this.ptTex2);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, canvas.width, canvas.height, 0, gl.RGBA, gl.FLOAT, null);
     }
     prepPathTraceRender() {
         const { gl, state: { frame } } = this;
@@ -8245,6 +8252,8 @@ class Renderer {
         gl.uniform1f(ud.projectionFactor, this.getProjectionFactor(state.pixelTolerance, 1));
         gl.uniform1i(ud.uniqueColors, state.showUniqueNodeColors ? 1 : 0);
         gl.uniform1i(ud.viewerRenderMode, state.renderMode);
+        gl.uniformMatrix4fv(ud.viewMatInv, false, camera.viewMatInv);
+        gl.uniformMatrix4fv(ud.projMatInv, false, camera.projMatInv);
         gl.uniformMatrix4fv(ud.camMatInv, false, camera.camMatInv);
         gl.uniformMatrix4fv(ud.prevCamMat, false, camera.prevCamMat);
         gl.uniform1f(ud.time, new Date().getTime() / 1000 - state.startTime);
@@ -8777,6 +8786,7 @@ function setRenderScale(num) {
     canvas.style.transform = `translate(-50%, -50%) scale(${1 / renderer.state.renderScale})`;
     document.getElementById('renderScale').value = `${renderer.state.renderScale}`;
     haveSettingsChanged = true;
+    renderer.resizeFBOs();
 }
 win.setRenderScale = setRenderScale.bind(undefined);
 function setDrawLevel(num) {
@@ -8881,6 +8891,7 @@ async function loadSceneStream(downloadPath) {
                 renderer.uploadTexData((svdag.dataLoadedOffset - lastUploadIndex) / 4);
                 lastUploadIndex = svdag.dataLoadedOffset;
                 lastUpload = d;
+                haveSettingsChanged = true;
             }
         }
         renderer.uploadTexData((svdag.dataLoadedOffset - lastUploadIndex) / 4);
@@ -8990,6 +9001,9 @@ function render() {
     const didUpdate = controller.update(dt);
     if (didUpdate || haveSettingsChanged) {
         haveSettingsChanged = false;
+        if (!renderer.state.dynamicTRP) {
+            renderer.state.frame = 0;
+        }
         renderer.state.cameraUpdateFrame = renderer.state.frame;
     }
     if (renderer.state.renderMode === _Renderer__WEBPACK_IMPORTED_MODULE_3__["RenderMode"].PATH_TRACING) {
