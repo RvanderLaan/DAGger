@@ -131,7 +131,7 @@ export default class Renderer {
     selectedVoxelIndex: -1,
     lightPos: vec3.create(),
     skyMode: 0,
-    dynamicTRP: true,
+    dynamicTRP: false,
   };
 
   constructor(
@@ -157,6 +157,14 @@ export default class Renderer {
 
     [this.ptFBO1, this.ptTex1] = this.setupTexFBO(gl.TEXTURE4, { internalFormat: gl.RGBA32F, format: gl.RGBA, type: gl.FLOAT });
     [this.ptFBO2, this.ptTex2] = this.setupTexFBO(gl.TEXTURE5, { internalFormat: gl.RGBA32F, format: gl.RGBA, type: gl.FLOAT });
+  }
+
+  resizeFBOs() {
+    const { gl, canvas } = this;
+    gl.bindTexture(gl.TEXTURE_2D, this.ptTex1);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, canvas.width, canvas.height, 0, gl.RGBA, gl.FLOAT, null);
+    gl.bindTexture(gl.TEXTURE_2D, this.ptTex2);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, canvas.width, canvas.height, 0, gl.RGBA, gl.FLOAT, null);
   }
 
   /**
@@ -313,6 +321,7 @@ export default class Renderer {
       gl.useProgram(this.texProgram);
       gl.uniform1i(texUniformDict.tex, uniform);
 
+
       gl.viewport(0, 0, canvas.width, canvas.height);
       gl.clearColor(0, 0, 0, 1);
       gl.clear(gl.COLOR_BUFFER_BIT);
@@ -453,8 +462,8 @@ export default class Renderer {
 
     gl.uniform1i(ud.viewerRenderMode, state.renderMode);
 
-    // gl.uniformMatrix4fv(ud.viewMatInv, false, camera.viewMatInv);
-    // gl.uniformMatrix4fv(ud.projMatInv, false, camera.projMatInv);
+    gl.uniformMatrix4fv(ud.viewMatInv, false, camera.viewMatInv);
+    gl.uniformMatrix4fv(ud.projMatInv, false, camera.projMatInv);
 
     // Set the previous camera matrix (for reprojection), update the current mat on the cam, and set in the shader
     // mat4.invert(camera.prevCamMat, camera.camMatInv);

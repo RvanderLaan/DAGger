@@ -397,36 +397,37 @@ vec3 fromHomog(in vec4 v) {
   return v.xyz/v.w;
 }
 
-Ray computeCameraRay(in vec2 pixelScreenCoords) {
-  vec4 pixel_s0 = vec4(pixelScreenCoords, 0, 1);
-  vec4 pixel_s1 = vec4(pixelScreenCoords, 1, 1);
-
-  // mat4 prevCamMatInv = inverse(prevCamMat); // Test: is the prev mat OK? Yes, it's ok
-  vec3 wpos0 = fromHomog(camMatInv * pixel_s0);
-  vec3 wpos1 = fromHomog(camMatInv * pixel_s1);
-  Ray r;
-  r.o = wpos0;
-  r.d = normalize(wpos1 - wpos0);
-  return r;
-}
-
+// Note: For some reason, this clips geometry close to the cam... But it should be faster than the alternative below
 // Ray computeCameraRay(in vec2 pixelScreenCoords) {
-//   vec4 pixel_s0 = vec4(pixelScreenCoords.x, pixelScreenCoords.y, 0, 1);
-//   vec4 pixel_s1 = vec4(pixelScreenCoords.x, pixelScreenCoords.y, 1, 1);
-  
-//   vec3 pixel_w0 = fromHomog(projMatInv * pixel_s0);
-//   vec3 pixel_w1 = fromHomog(projMatInv * pixel_s1);
-  
+//   vec4 pixel_s0 = vec4(pixelScreenCoords, 0, 1);
+//   vec4 pixel_s1 = vec4(pixelScreenCoords, 1, 1);
+
+//   // mat4 prevCamMatInv = inverse(prevCamMat); // Test: is the prev mat OK? Yes, it's ok
+//   vec3 wpos0 = fromHomog(camMatInv * pixel_s0);
+//   vec3 wpos1 = fromHomog(camMatInv * pixel_s1);
 //   Ray r;
-//   r.o = vec3(0,0,0);
-//   r.d = normalize(pixel_w1 - pixel_w0);
-  
-//   vec3 o_prime = vec3(viewMatInv * vec4(r.o, 1));
-//   vec3 e_prime = vec3(viewMatInv * vec4(r.d, 1));
-//   r.o = o_prime;
-//   r.d = normalize(e_prime - o_prime);
+//   r.o = wpos0;
+//   r.d = normalize(wpos1 - wpos0);
 //   return r;
 // }
+
+Ray computeCameraRay(in vec2 pixelScreenCoords) {
+  vec4 pixel_s0 = vec4(pixelScreenCoords.x, pixelScreenCoords.y, 0, 1);
+  vec4 pixel_s1 = vec4(pixelScreenCoords.x, pixelScreenCoords.y, 1, 1);
+  
+  vec3 pixel_w0 = fromHomog(projMatInv * pixel_s0);
+  vec3 pixel_w1 = fromHomog(projMatInv * pixel_s1);
+  
+  Ray r;
+  r.o = vec3(0,0,0);
+  r.d = normalize(pixel_w1 - pixel_w0);
+  
+  vec3 o_prime = vec3(viewMatInv * vec4(r.o, 1));
+  vec3 e_prime = vec3(viewMatInv * vec4(r.d, 1));
+  r.o = o_prime;
+  r.d = normalize(e_prime - o_prime);
+  return r;
+}
 
 float getMinT(in int delta) {
 	ivec2 p = ivec2((ivec2(gl_FragCoord.xy) - delta / 2) / delta);
@@ -630,9 +631,13 @@ vec3 reproject(in vec3 hitPos, in vec3 camPos, in vec3 camDir) {
 
     vec2 screenPos = gl_FragCoord.xy / resolution;
     float offset = length(screenPos - reprojectedP.xy);
-    if (offset > 0.1 || reprojectedP.x < 0. || reprojectedP.y < 0. || reprojectedP.x > 1. || reprojectedP.y > 1.) {
+    if (
+      // Abort if too much distance between source->target pixel, or outside of screen bounds
+      offset > 0.1 || reprojectedP.x < 0. || reprojectedP.y < 0. || reprojectedP.x > 1. || reprojectedP.y > 1.
+    ) {
       return vec3(-1);
     }
+    // TODO: Try out bilinear filter look-up (4 texture taps)
     return texelFetch(prevFrameTex, ivec2((reprojectedP.xy * resolution)), 0).rgb;
 }
 
@@ -765,7 +770,7 @@ void main() {
       }
     } else {
       vec3 lastFrameColor = texelFetch(prevFrameTex, ivec2(gl_FragCoord.xy), 0).rgb;
-      color = mix(lastFrameColor, color, .06);// 1.0f / float(ptFrame + 1u)
+      color = mix(lastFrameColor, color, 1.0f / float(ptFrame + 1u));
     }
 
   }

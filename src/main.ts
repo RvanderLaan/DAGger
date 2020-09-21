@@ -45,6 +45,7 @@ function setRenderScale(num: number) {
   canvas.style.transform = `translate(-50%, -50%) scale(${1/renderer.state.renderScale})`;
   (document.getElementById('renderScale') as HTMLInputElement).value = `${renderer.state.renderScale}`;
   haveSettingsChanged = true;
+  renderer.resizeFBOs();
 }
 win.setRenderScale = setRenderScale.bind(this);
 
@@ -180,6 +181,7 @@ async function loadSceneStream(downloadPath: string) {
         renderer.uploadTexData((svdag.dataLoadedOffset - lastUploadIndex) / 4);
         lastUploadIndex = svdag.dataLoadedOffset;
         lastUpload = d;
+        haveSettingsChanged = true; // re-fresh the path tracing
       }
     }
 
@@ -344,7 +346,11 @@ function render() {
 
   if (didUpdate || haveSettingsChanged) {
     haveSettingsChanged = false;
-    renderer.state.cameraUpdateFrame = renderer.state.frame; // restart path tracing if scene changed, since previous frames are used which are invalidated when an update occurs
+    if (!renderer.state.dynamicTRP) { // reset frame nr to reset the back buffer when not using dynamic temporal reprojection
+      renderer.state.frame = 0;
+    }
+    // restart path tracing if scene changed, since previous frames are used which are invalidated when an update occurs
+    renderer.state.cameraUpdateFrame = renderer.state.frame; 
   }
   if (renderer.state.renderMode === RenderMode.PATH_TRACING) {
     progressBar.style.width = `${100 * (renderer.state.frame - renderer.state.cameraUpdateFrame) / MAX_PATH_TRACE_SAMPLES}%`;

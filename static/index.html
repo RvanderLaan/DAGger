@@ -90,7 +90,7 @@
     <!-- TODO: minimize button -->
     <button style="width: 10%; float: right" onclick="const el = document.querySelector('#overlay-content'); el.style.display = el.style.display === 'none' ? 'inherit' : 'none';">-</button>
     <button style="width: 10%; float: right"
-      onclick="alert('Controls:\n-WASD to move around\n-Click and drag to rotate\nHold shift to increase move speed\nScroll to adjust move speed\n-QE to rotate horizontally\n-1 and 2 to decrease/increase draw level')"
+      onclick="alert('Controls:\n-WASD to move around\n-Click and drag to rotate\nHold shift to increase move speed\nScroll to adjust move speed\n-QE to rotate horizontally\n-1 and 2 to decrease/increase draw level\n-L to set diffuse light position')"
     >?</button>
 
     <br />
@@ -121,19 +121,19 @@
 
       <br />
 
-      <label for="nPathTraceBounces" title="The max. amount of bounces of a ray in the path tracing render mode. More bounces causes more accurate light simulation, but expensive to compute">
+      <label for="nPathTraceBounces" title="[Path tracing] The max. amount of bounces of a ray in the path tracing render mode. More bounces causes more accurate light simulation, but expensive to compute">
         Path tracing bounces</label>
       <input type="number" id="nPathTraceBounces" min="0" max="32" value="1" step="1" onchange="setNPathTraceBounces(this.value)" />
       
       <br />
 
-      <label for="depthOfField" title="How much to jitter the camera origin in path tracing render mode. Acts like a depth of field effect">
+      <label for="depthOfField" title="[Path tracing] How much to jitter the camera origin in path tracing render mode. Acts like a depth of field effect">
         Depth of field</label>
       <input type="number" id="depthOfField" min="0" max="100" value="0" step="0.01" onchange="setDepthOfField(this.value)" />
 
       <br />
 
-      <label for="skyMode">Sky mode</label>
+      <label for="skyMode" title="[Path tracing] Sets the sky color">Sky mode</label>
       <select id="skyMode" style="max-width: 50%; float: right" onchange="setSkyMode(this.value)">
         <option value="0">White</option>
         <option value="1">Ray direction</option>
@@ -142,10 +142,10 @@
 
       <br />
 
-      <label for="reprojectionMode" title="Whether to reproject pixels from the previous frame using the previous camera transform (better interactivity), or to naively average the previous frame with the current one (converges faster)">
+      <label for="reprojectionMode" title="[Path tracing] Whether to reproject pixels from the previous frame using the previous camera transform (better interactivity), or to naively average the previous frame with the current one (converges faster)">
         Dynamic Temporal Reproj.
       </label>
-      <input type="checkbox" id="reprojectionMode" checked="true" onchange="setReprojectionMode(this.checked)" />
+      <input type="checkbox" id="reprojectionMode" onchange="setReprojectionMode(this.checked)" />
 
       <br />
 
@@ -187,7 +187,7 @@
 
       <br /> 
       
-      <label for="moveSpeed" title="How fast the camera controller moves with the WASD keys">
+      <label for="moveSpeed" title="How fast the camera controller moves with the WASD keys. Can also adjust with scroll wheel">
         Movement speed
       </label>
       <input type="number" id="moveSpeed" value="1" min="0" max="10000" step="10" onchange="setMoveSpeed(this.value)" />
