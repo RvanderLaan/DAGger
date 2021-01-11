@@ -4,8 +4,15 @@
 
 This is a web version of the viewer application from my [SVDAG-Compression](https://github.com/RvanderLaan/SVDAG-Compression) repository, which originates from the source code released alongside the [SSVDAG paper](http://jcgt.org/published/0006/02/01/).
 
+### Screenshots
+
 <img alt="The cube fractal scene rendered in DAGger using path tracing" src="images/dagger-cube-fractal.png?raw=true" height="200" />
 <img alt="Epic Citadel at 32K^3 rendered using path tracing" src="images/epic-citadel-15.png?raw=true" height="200" />
+
+
+### Video demo/bug-art
+
+[![Video demo/dev-log/bug-art"](https://img.youtube.com/vi/_OkDJ0WtI4w/0.jpg)](https://www.youtube.com/watch?v=_OkDJ0WtI4w)
 
 ## Goals
  - [x] Render Sparse Voxel DAG in the browser using WebGL.
