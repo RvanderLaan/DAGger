@@ -24,5 +24,4 @@ This is a web version of the viewer application from my [SVDAG-Compression](http
 Running it locally:
 - Get NPM and Yarn installed
 - Install dependencies with `yarn install`
-- Run `yarn watch` to watch for file changes (will keep running), a new JS bundle will be generated each time you save a file into the `/static` folder
-- Start a web server on the `/static` folder, which can be done by running `yarn serve` in a new terminal
+- Running `yarn start` will compile TypeScript to JavaScript and start up an http server

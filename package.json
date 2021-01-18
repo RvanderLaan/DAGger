@@ -2,7 +2,7 @@
   "name": "dagger",
   "homepage": "https://rvanderlaan.github.io/dagger",
   "version": "1.1.0",
-  "description": "",
+  "description": "Sparse Voxel DAG Rendering on the Web",
   "main": "./src/main.ts",
   "scripts": {
     "start": "webpack-dev-server --inline --open",
@@ -10,8 +10,8 @@
     "predeploy": "yarn run build",
     "deploy": "gh-pages -d dist"
   },
-  "author": "",
-  "license": "ISC",
+  "author": "Remi van der Laan",
+  "license": "GPL-3.0",
   "dependencies": {
     "gl-matrix": "^3.3.0"
   },
